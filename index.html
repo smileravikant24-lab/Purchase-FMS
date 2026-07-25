@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Purchase order tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F4F5F1; --surface:#FFFFFF; --border:#E1E3DC; --border-strong:#CBCFC5;
+    --ink:#1C2119; --ink-muted:#5C6457; --ink-faint:#8A9080;
+    --accent:#0F6E56; --accent-soft:#E1F5EE; --accent-ink:#085041;
+    --warn:#9A5B0C; --warn-soft:#FAEEDA; --danger:#A32D2D; --danger-soft:#FCEBEB;
+    --radius:10px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:'Inter',sans-serif; font-size:14px; line-height:1.55;
+    padding:32px 24px 80px; min-height:100vh;
+  }
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .wrap{max-width:1080px; margin:0 auto;}
+
+  header{display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:28px; gap:16px; flex-wrap:wrap;}
+  h1{font-family:'Space Grotesk',sans-serif; font-size:26px; font-weight:600; letter-spacing:-0.01em;}
+  .sub{color:var(--ink-muted); font-size:13px; margin-top:4px;}
+  .btn{
+    background:var(--accent); color:#fff; border:none; border-radius:var(--radius);
+    padding:11px 18px; font-size:13.5px; font-weight:600; cursor:pointer; font-family:inherit;
+    transition:opacity .15s;
+  }
+  .btn:hover{opacity:.88;}
+  .btn.ghost{background:transparent; color:var(--ink); border:1px solid var(--border-strong);}
+  .btn.small{padding:6px 12px; font-size:12.5px; border-radius:7px;}
+  .btn:disabled{opacity:.4; cursor:not-allowed;}
+
+  .stats{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:28px;}
+  .stat{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px 18px;}
+  .stat .num{font-family:'Space Grotesk',sans-serif; font-size:26px; font-weight:600;}
+  .stat .lbl{font-size:12px; color:var(--ink-muted); margin-top:2px;}
+  .stat.warn .num{color:var(--warn);}
+  .stat.danger .num{color:var(--danger);}
+
+  .panel{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden;}
+  .row-head{display:grid; grid-template-columns:34px 1.4fr 1.2fr 1fr 1.6fr 1fr 32px; gap:8px; padding:11px 16px; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint); border-bottom:1px solid var(--border);}
+  .order-row{border-bottom:1px solid var(--border);}
+  .order-row:last-child{border-bottom:none;}
+  .order-summary{display:grid; grid-template-columns:34px 1.4fr 1.2fr 1fr 1.6fr 1fr 32px; gap:8px; padding:14px 16px; align-items:center; cursor:pointer;}
+  .order-summary:hover{background:#FAFAF8;}
+  .stamp{display:flex; gap:3px;}
+  .tick{width:14px; height:14px; border-radius:3px; border:1px solid var(--border-strong); flex-shrink:0;}
+  .tick.done{background:var(--accent); border-color:var(--accent);}
+  .tick.overdue{background:var(--danger); border-color:var(--danger);}
+  .pid{font-weight:600;}
+  .badge{display:inline-block; font-size:11px; font-weight:600; padding:3px 8px; border-radius:5px;}
+  .badge.ok{background:var(--accent-soft); color:var(--accent-ink);}
+  .badge.warn{background:var(--warn-soft); color:var(--warn);}
+  .badge.danger{background:var(--danger-soft); color:var(--danger);}
+  .chev{transition:transform .15s; color:var(--ink-faint);}
+  .chev.open{transform:rotate(90deg);}
+
+  .detail{padding:0 16px 20px 50px; display:none;}
+  .detail.open{display:block;}
+  .detail h4{font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-faint); margin:14px 0 8px;}
+  table.items{width:100%; border-collapse:collapse; font-size:13px;}
+  table.items th{text-align:left; font-weight:500; color:var(--ink-muted); font-size:11.5px; padding:6px 8px; border-bottom:1px solid var(--border);}
+  table.items td{padding:7px 8px; border-bottom:1px solid var(--border);}
+  table.items tr:last-child td{border-bottom:none;}
+  .mismatch{color:var(--danger); font-weight:600;}
+  .steps{display:flex; flex-wrap:wrap; gap:8px; margin-top:6px;}
+  .step-card{border:1px solid var(--border); border-radius:8px; padding:10px 12px; min-width:150px; flex:1;}
+  .step-card.done{border-color:var(--accent); background:var(--accent-soft);}
+  .step-card.current{border-color:var(--warn);}
+  .step-card .name{font-weight:600; font-size:12.5px;}
+  .step-card .time{font-size:11px; color:var(--ink-muted); margin-top:3px;}
+  .step-card .time.late{color:var(--danger);}
+
+  .inv-row{display:flex; align-items:center; gap:10px; padding:6px 0; font-size:13px;}
+  .inv-row input{width:90px; padding:5px 7px; border:1px solid var(--border-strong); border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:12.5px;}
+  .doc-row{display:flex; align-items:center; gap:10px; padding:5px 0; font-size:12.5px;}
+  .doc-row span{width:110px; flex-shrink:0; color:var(--ink-muted);}
+  .doc-row input{flex:1; padding:6px 8px; border:1px solid var(--border-strong); border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:12px;}
+  .doc-chip{display:inline-flex; align-items:center; gap:4px; background:var(--accent-soft); color:var(--accent-ink); font-size:11px; font-weight:600; padding:3px 8px; border-radius:5px; margin:2px 4px 2px 0; text-decoration:none;}
+  .task-card{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 20px; margin-bottom:14px;}
+  .task-card.overdue{border-color:var(--danger);}
+  .task-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; flex-wrap:wrap; gap:8px;}
+  .task-pid{font-family:'JetBrains Mono',monospace; font-weight:600; font-size:15px;}
+  .task-sub{color:var(--ink-muted); font-size:13px; margin-bottom:14px;}
+  .task-items{font-size:12.5px; color:var(--ink-muted); margin-bottom:10px; line-height:1.6;}
+
+  .empty{padding:60px 20px; text-align:center; color:var(--ink-muted);}
+  .empty .big{font-family:'Space Grotesk',sans-serif; font-size:18px; color:var(--ink); margin-bottom:6px;}
+
+  .modal-bg{display:none; position:static; min-height:0;}
+  .modal-bg.open{display:flex; align-items:flex-start; justify-content:center; min-height:100vh; background:rgba(20,22,18,.4); padding:40px 16px;}
+  .modal{background:var(--surface); border-radius:14px; width:100%; max-width:560px; padding:24px; max-height:85vh; overflow-y:auto;}
+  .modal h3{font-family:'Space Grotesk',sans-serif; font-size:18px; margin-bottom:16px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block; font-size:12px; color:var(--ink-muted); margin-bottom:5px; font-weight:500;}
+  .field input, .field select{width:100%; padding:9px 10px; border:1px solid var(--border-strong); border-radius:7px; font-family:inherit; font-size:13.5px;}
+  .item-grid{display:grid; grid-template-columns:2fr 1fr 1fr 32px; gap:8px; margin-bottom:8px; align-items:center;}
+  .item-grid input{padding:8px; border:1px solid var(--border-strong); border-radius:6px; font-size:12.5px;}
+  .rm{background:none; border:none; color:var(--danger); font-size:16px; cursor:pointer;}
+  .modal-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:18px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Purchase order tracker</h1>
+      <div class="sub">Purchase FMS 26-27 &middot; item-level qty, auto time, no Looker</div>
+    </div>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <button class="btn ghost small" onclick="resyncSeed()" title="Purchase Form 26-27 se dubara load karein">&#8635; Resync from Purchase Form</button>
+      <button class="btn ghost" onclick="openModal()">+ Add manually</button>
+    </div>
+  </header>
+  <div class="sub" style="margin:-18px 0 14px;">Data source: <span class="mono">Purchase Form 26-27</span> &middot; <a href="https://docs.google.com/spreadsheets/d/1bzFrGTL-oaGrrjyXgI8WJuKOzgJG2-9jcD8r80QR73w/edit" target="_blank" style="color:var(--accent);">Sheet kholiye &#8599;</a></div>
+
+  <div id="loginBanner" style="display:flex; align-items:center; gap:10px; margin-bottom:18px; flex-wrap:wrap; padding:12px 14px; border:1px solid var(--border); border-radius:10px; background:var(--surface);">
+    <span class="sub" style="margin:0; font-weight:600;">Aap kaun hain?</span>
+    <button class="btn small" id="btn-all" onclick="setCurrentUser('all')">Admin (sabhi dekhein)</button>
+    <button class="btn ghost small" id="btn-sandeep" onclick="setCurrentUser('satijapaper@gmail.com')">Sandeep ji</button>
+    <button class="btn ghost small" id="btn-pooja" onclick="setCurrentUser('poojasatijapaper@gmail.com')">Pooja ji</button>
+  </div>
+
+  <div class="stats" id="stats"></div>
+  <div class="panel" id="panel"></div>
+</div>
+
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h3>New purchase order</h3>
+    <div class="field">
+      <label>Mill / supplier</label>
+      <input id="f-mill" placeholder="e.g. Khanna Paper Mills LTD">
+    </div>
+    <div class="field">
+      <label>PO date</label>
+      <input id="f-date" type="date">
+    </div>
+    <div class="field">
+      <label>Items</label>
+      <div id="itemRows"></div>
+      <button class="btn ghost small" onclick="addItemRow()" style="margin-top:4px;">+ Add item</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn" onclick="submitOrder()">Create order</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STEPS = [
+  {key:'PO1', label:'Order placed', hours:0, doerName:'Mr. Sandeep Dhawan', doerEmail:'satijapaper@gmail.com', docs:[]},
+  {key:'PO2', label:'Mill confirms', hours:24, doerName:'Mr. Sandeep Dhawan', doerEmail:'satijapaper@gmail.com', docs:['Confirmation PDF']},
+  {key:'PO3', label:'Dispatch + invoice', hours:48, doerName:'Mr. Sandeep Dhawan', doerEmail:'satijapaper@gmail.com', docs:['Packing List','Invoice PDF']},
+  {key:'PO4', label:'Driver follow-up', hours:72, doerName:'Mr. Sandeep Dhawan', doerEmail:'satijapaper@gmail.com', docs:[]},
+  {key:'PO5', label:'Warehouse delivery', hours:96, doerName:'Ms. Pooja', doerEmail:'poojasatijapaper@gmail.com', docs:['Godown Slip','GR Signed Copy']},
+  {key:'PO6', label:'Transporter + GR', hours:120, doerName:'Ms. Pooja', doerEmail:'poojasatijapaper@gmail.com', docs:['E-Way Bill','GR Copy']},
+];
+const PURCHASE_FORM_URL = 'https://docs.google.com/spreadsheets/d/1bzFrGTL-oaGrrjyXgI8WJuKOzgJG2-9jcD8r80QR73w/edit';
+let currentUser = 'all';
+let pendingDocs = {};
+
+// ===== BACKEND CONFIG =====
+// Apps Script deploy karne ke baad, yaha uska Web App URL paste kariye.
+// Khaali chhoड़ने par, dashboard Claude ke andar test-mode (window.storage) mein chalega.
+const APPS_SCRIPT_URL = '';
+
+async function apiCall(payload){
+  const res = await fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    headers: {'Content-Type': 'text/plain;charset=utf-8'},
+    body: JSON.stringify(payload)
+  });
+  return res.json();
+}
+
+// Storage abstraction: real backend agar configured hai, warna Claude test-storage.
+async function backendGetOrders(){
+  if(APPS_SCRIPT_URL){
+    const data = await apiCall({action:'getOrders'});
+    return data.orders || [];
+  }
+  const list = await window.storage.list('po:', false);
+  if(!list || !list.keys || list.keys.length === 0) return null;
+  const results = await Promise.all(list.keys.map(async k => {
+    try{ const r = await window.storage.get(k, false); return r ? JSON.parse(r.value) : null; }
+    catch(e){ return null; }
+  }));
+  return results.filter(Boolean);
+}
+
+async function backendSaveOrder(order){
+  if(APPS_SCRIPT_URL){
+    return apiCall({action:'saveOrder', order});
+  }
+  return window.storage.set('po:' + order.id, JSON.stringify(order), false);
+}
+
+async function backendUploadDoc(orderId, stepKey, docLabel, fileName, mimeType, base64){
+  if(APPS_SCRIPT_URL){
+    return apiCall({action:'uploadDoc', orderId, stepKey, docLabel, fileName, mimeType, base64});
+  }
+  const key = `doc:${orderId}:${stepKey}:${docLabel}`;
+  await window.storage.set(key, base64, false);
+  return { url: null, storedLocally: true };
+}
+
+let orders = [];
+let expanded = {};
+let itemRowCount = 0;
+
+const SEED_DATA = [{"id": "PO-SP/26-27/0001", "mill": "Khanna Paper Mills LTD", "poDate": "2026-04-01", "items": [{"id": "i1", "product": "KHANNA A4 KBOLT (S) 65 GSM", "orderQty": 7000.0, "unit": "Kg", "rate": 71.55, "invoiceQty": null}, {"id": "i2", "product": "KHANNA A3 KBOLT (S) 65 GSM", "orderQty": 6000.0, "unit": "Kg", "rate": 71.55, "invoiceQty": null}, {"id": "i3", "product": "KHANNA A4 ECOPY (S) 75 GSM", "orderQty": 7000.0, "unit": "Kg", "rate": 70.55, "invoiceQty": null}], "createdAt": 1775001600000, "steps": {"PO1": {"status": "done", "planned": 1777119147360, "actual": 1776949308288}, "PO2": {"status": "done", "planned": 1776952908576, "actual": 1776956467392}, "PO3": {"status": "done", "planned": 1776960066816, "actual": 1777032231552}, "PO4": {"status": "done", "planned": 1777118579712, "actual": 1777042920960}, "PO5": {"status": "done", "planned": 1777129320096, "actual": 1777053142944}, "PO6": {"status": "done", "planned": 1777398742944, "actual": 1777310841312}}}, {"id": "PO-SP/26-27/0004", "mill": "Satia Industries Limited", "poDate": "2026-04-04", "items": [{"id": "i1", "product": "SATIA A4 70 GSM", "orderQty": 20000.0, "unit": "Kg", "rate": 71.0, "invoiceQty": null}], "createdAt": 1775260800000, "steps": {"PO1": {"status": "done", "planned": 1777119571584, "actual": 1776952631232}, "PO2": {"status": "done", "planned": 1776956231520, "actual": 1777033286496}, "PO3": {"status": "done", "planned": 1777036886784, "actual": 1777042771488}, "PO4": {"status": "done", "planned": 1777129140384, "actual": 1777047306624}, "PO5": {"status": "done", "planned": 1777133699712, "actual": 1777053155904}, "PO6": {"status": "done", "planned": 1777398755904, "actual": 1777310419680}}}, {"id": "PO-SP/26-27/0005", "mill": "Satia Industries Limited", "poDate": "2026-04-04", "items": [{"id": "i1", "product": "SATIA A4 70 GSM", "orderQty": 20000.0, "unit": "Kg", "rate": 71.0, "invoiceQty": null}], "createdAt": 1775260800000, "steps": {"PO1": {"status": "done", "planned": 1777119634656, "actual": 1776952620864}, "PO2": {"status": "done", "planned": 1776956221152, "actual": 1777033337472}, "PO3": {"status": "done", "planned": 1777036936896, "actual": 1777042858752}, "PO4": {"status": "done", "planned": 1777129200000, "actual": 1777047320448}, "PO5": {"status": "done", "planned": 1777133699712, "actual": 1777053165408}, "PO6": {"status": "done", "planned": 1777398765408, "actual": 1777310149248}}}, {"id": "PO-SP/26-27/0002", "mill": "Khanna Paper Mills LTD", "poDate": "2026-04-11", "items": [{"id": "i1", "product": "KHANNA A4 KBOLT (S) 65 GSM", "orderQty": 7000.0, "unit": "Kg", "rate": 71.55, "invoiceQty": null}, {"id": "i2", "product": "KHANNA A4 EPRINT (S) 70 GSM", "orderQty": 6000.0, "unit": "Kg", "rate": 71.05, "invoiceQty": null}, {"id": "i3", "product": "KHANNA A4 ECOPY (S) 75 GSM", "orderQty": 7000.0, "unit": "Kg", "rate": 70.55, "invoiceQty": null}], "createdAt": 1775865600000, "steps": {"PO1": {"status": "done", "planned": 1777119300288, "actual": 1776949322112}, "PO2": {"status": "done", "planned": 1776952922400, "actual": 1776956527008}, "PO3": {"status": "done", "planned": 1776960127296, "actual": 1777032149472}, "PO4": {"status": "done", "planned": 1777118520096, "actual": 1777042887264}, "PO5": {"status": "done", "planned": 1777129259616, "actual": 1777053116160}, "PO6": {"status": "done", "planned": 1777398716160, "actual": 1777311150624}}}, {"id": "PO-SP/26-27/0003", "mill": "Khanna Paper Mills LTD", "poDate": "2026-04-11", "items": [{"id": "i1", "product": "KHANNA A4 KBOLT (S) 65 GSM", "orderQty": 7000.0, "unit": "Kg", "rate": 71.55, "invoiceQty": null}, {"id": "i2", "product": "KHANNA A4 EPRINT (S) 70 GSM", "orderQty": 6000.0, "unit": "Kg", "rate": 71.05, "invoiceQty": null}, {"id": "i3", "product": "KHANNA A4 ECOPY (S) 75 GSM", "orderQty": 7000.0, "unit": "Kg", "rate": 70.55, "invoiceQty": null}], "createdAt": 1775865600000, "steps": {"PO1": {"status": "done", "planned": 1777119388416, "actual": 1776949334208}, "PO2": {"status": "done", "planned": 1776952934496, "actual": 1776956633280}, "PO3": {"status": "done", "planned": 1776960233568, "actual": 1777032298944}, "PO4": {"status": "done", "planned": 1777118640192, "actual": 1777042910592}, "PO5": {"status": "done", "planned": 1777129259616, "actual": 1777053126528}, "PO6": {"status": "done", "planned": 1777398726528, "actual": 1777311429696}}}, {"id": "PO-SP/26-27/0006", "mill": "Satia Industries Limited", "poDate": "2026-04-14", "items": [{"id": "i1", "product": "SATIA A4 70 GSM", "orderQty": 15000.0, "unit": "Kg", "rate": 71.0, "invoiceQty": null}], "createdAt": 1776124800000, "steps": {"PO1": {"status": "done", "planned": 1777119714144, "actual": 1776949351488}, "PO2": {"status": "done", "planned": 1776952951776, "actual": 1777390186752}, "PO3": {"status": "done", "planned": 1777393787040, "actual": 1777485677760}, "PO4": {"status": "done", "planned": 1777572059616, "actual": 1777486762080}, "PO5": {"status": "done", "planned": 1777573139616, "actual": 1777628141856}, "PO6": {"status": "done", "planned": 1777975200288, "actual": 1777634987328}}}, {"id": "PO-SP/26-27/0007", "mill": "Satia Industries Limited", "poDate": "2026-04-14", "items": [{"id": "i1", "product": "SATIA A4 70 GSM", "orderQty": 15000.0, "unit": "Kg", "rate": 71.0, "invoiceQty": null}], "createdAt": 1776124800000, "steps": {"PO1": {"status": "done", "planned": 1777119774624, "actual": 1776952640736}, "PO2": {"status": "done", "planned": 1776956241024, "actual": 1777485554208}, "PO3": {"status": "done", "planned": 1777546753920, "actual": 1777487143104}, "PO4": {"status": "done", "planned": 1777573499904, "actual": 1777548440448}, "PO5": {"status": "done", "planned": 1777634819712, "actual": 1777657373568}, "PO6": {"status": "done", "planned": 1778002973568, "actual": 1777715017920}}}, {"id": "PO-SP/26-27/0009", "mill": "Ruchira Papers Limited", "poDate": "2026-04-24", "items": [{"id": "i1", "product": "Tarang Yellow A4 75 GSM", "orderQty": 5850.0, "unit": "Kg", "rate": 75.21, "invoiceQty": null}, {"id": "i2", "product": "Tarang Pink A4 75 GSM", "orderQty": 4680.0, "unit": "Kg", "rate": 75.21, "invoiceQty": null}, {"id": "i3", "product": "Tarang Green A4 75 GSM", "orderQty": 8190.0, "unit": "Kg", "rate": 75.21, "invoiceQty": null}, {"id": "i4", "product": "Tarang Blue A4 75 GSM", "orderQty": 3334.5, "unit": "Kg", "rate": 75.21, "invoiceQty": null}], "createdAt": 1776988800000, "steps": {"PO1": {"status": "done", "planned": 1777301438400, "actual": 1777053326976}, "PO2": {"status": "done", "planned": 1777114526688, "actual": 1777057136352}, "PO3": {"status": "done", "planned": 1777114799712, "actual": 1778064666624}, "PO4": {"status": "done", "planned": 1778151059712, "actual": 1778095706688}, "PO5": {"status": "done", "planned": 1778182079904, "actual": 1778160854016}, "PO6": {"status": "done", "planned": 1778506454016, "actual": 1778168101248}}, "_legacySharedInvoiceQty": 22054.5}, {"id": "PO-SP/26-27/0010", "mill": "Seth Faqir Chand Karwa & Co. (CHD)", "poDate": "2026-05-08", "items": [{"id": "i1", "product": "SPECTRA A4 75 GSM", "orderQty": 15210.0, "unit": "Kg", "rate": 72.07, "invoiceQty": null}], "createdAt": 1778198400000, "steps": {"PO1": {"status": "done", "planned": 1778507631648, "actual": 1778253852384}, "PO2": {"status": "done", "planned": 1778257451808, "actual": 1778255629632}, "PO3": {"status": "done", "planned": 1778259229056, "actual": 1778257898496}, "PO4": {"status": "done", "planned": 1778344259616, "actual": 1778259864960}, "PO5": {"status": "done", "planned": 1778346239904, "actual": 1778498167392}, "PO6": {"status": "done", "planned": 1778757367392, "actual": 1778498561376}}}, {"id": "PO-SP/26-27/0011", "mill": "Seth Faqir Chand Karwa & Co. (LDH)", "poDate": "2026-05-08", "items": [{"id": "i1", "product": "SPECTRA A4 75 GSM", "orderQty": 16731.0, "unit": "Kg", "rate": 72.07, "invoiceQty": null}, {"id": "i2", "product": "SPECTRA FS 75 GSM", "orderQty": 834.0, "unit": "Kg", "rate": 72.07, "invoiceQty": null}, {"id": "i3", "product": "SPECTRA A3 75 GSM", "orderQty": 351.0, "unit": "Kg", "rate": 72.07, "invoiceQty": null}], "createdAt": 1778198400000, "steps": {"PO1": {"status": "done", "planned": 1778516352000, "actual": 1778258003904}, "PO2": {"status": "done", "planned": 1778261604192, "actual": 1778259926304}, "PO3": {"status": "done", "planned": 1778321126016, "actual": 1778261605056}, "PO4": {"status": "done", "planned": 1778347980000, "actual": 1778262458688}, "PO5": {"status": "done", "planned": 1778348819808, "actual": 1778498282304}, "PO6": {"status": "done", "planned": 1778757482304, "actual": 1778498767872}}, "_legacySharedInvoiceQty": 17916.0}, {"id": "PO-SP/26-27/0012", "mill": "Khanna Paper Mills LTD", "poDate": "2026-05-15", "items": [{"id": "i1", "product": "KHANNA A4 ECOPY (S) 75 GSM", "orderQty": 4680.0, "unit": "Kg", "rate": 68.36, "invoiceQty": null}, {"id": "i2", "product": "KHANNA A4 EPRINT (S) 70 GSM", "orderQty": 1308.0, "unit": "Kg", "rate": 68.86, "invoiceQty": null}, {"id": "i3", "product": "KHANNA A4 KBOLT (S) 65 GSM", "orderQty": 4040.0, "unit": "Kg", "rate": 69.36, "invoiceQty": null}], "createdAt": 1778803200000, "steps": {"PO1": {"status": "done", "planned": 1779127200000, "actual": 1778954626368}, "PO2": {"status": "done", "planned": 1779101999712, "actual": 1779103966176}, "PO3": {"status": "done", "planned": 1779107566464, "actual": 1779110502336}, "PO4": {"status": "done", "planned": 1779196860000, "actual": 1779121400832}, "PO5": {"status": "done", "planned": 1779207780096, "actual": 1779126497568}, "PO6": {"status": "done", "planned": 1779385697568, "actual": 1779369250464}}}, {"id": "PO-SP/26-27/0013", "mill": "Khanna Paper Mills LTD", "poDate": "2026-05-15", "items": [{"id": "i1", "product": "KHANNA A4 KBOLT (S) 65 GSM", "orderQty": 5000.0, "unit": "Kg", "rate": 69.36, "invoiceQty": null}, {"id": "i2", "product": "KHANNA A4 ECOPY (S) 75 GSM", "orderQty": 5000.0, "unit": "Kg", "rate": 68.36, "invoiceQty": null}], "createdAt": 1778803200000, "steps": {"PO1": {"status": "done", "planned": 1779127200000, "actual": 1779103726848}, "PO2": {"status": "done", "planned": 1779107327136, "actual": 1779110546400}, "PO3": {"status": "done", "planned": 1779114146688, "actual": 1779121376640}, "PO4": {"status": "done", "planned": 1779207719616, "actual": 1779126234912}, "PO5": {"status": "done", "planned": 1779212579616, "actual": 1779193422144}, "PO6": {"status": "done", "planned": 1779452622144, "actual": 1779368910912}}}, {"id": "PO-SP/26-27/0015", "mill": "Satia Industries Limited", "poDate": "2026-05-15", "items": [{"id": "i1", "product": "SATIA A4 75 GSM", "orderQty": 2000.0, "unit": "Kg", "rate": 68.5, "invoiceQty": null}, {"id": "i2", "product": "SATIA A4 70 GSM", "orderQty": 11000.0, "unit": "Kg", "rate": 69.0, "invoiceQty": null}, {"id": "i3", "product": "SATIA A3 70 GSM", "orderQty": 2000.0, "unit": "Kg", "rate": 69.0, "invoiceQty": null}], "createdAt": 1778803200000, "steps": {"PO1": {"status": "done", "planned": 1779127200000, "actual": 1778954644512}, "PO2": {"status": "done", "planned": 1779101999712, "actual": 1779103805472}, "PO3": {"status": "done", "planned": 1779107405760, "actual": 1779130584288}, "PO4": {"status": "done", "planned": 1779216960096, "actual": 1779188905152}, "PO5": {"status": "done", "planned": 1779275280096, "actual": 1779368158368}, "PO6": {"status": "done", "planned": 1779713758368, "actual": 1779369907104}}}, {"id": "PO-SP/26-27/0016", "mill": "Seth Faqir Chand Karwa & Co. (CHD)", "poDate": "2026-05-21", "items": [{"id": "i1", "product": "SPECTRA A4 75 GSM", "orderQty": 13104.0, "unit": "Kg", "rate": 72.07, "invoiceQty": null}, {"id": "i2", "product": "SPECTRA FS 75 GSM", "orderQty": 1946.0, "unit": "Kg", "rate": 72.56, "invoiceQty": null}], "createdAt": 1779321600000, "steps": {"PO1": {"status": "done", "planned": 1779540830496, "actual": 1779369738624}, "PO2": {"status": "done", "planned": 1779373338048, "actual": 1779377734944}, "PO3": {"status": "done", "planned": 1779381335232, "actual": 1779380255232}, "PO4": {"status": "done", "planned": 1779466619808, "actual": 1779389181216}, "PO5": {"status": "done", "planned": 1779475559616, "actual": 1779467308416}, "PO6": {"status": "done", "planned": 1779812908416, "actual": 1779468427296}}}, {"id": "PO-SP/26-27/0017", "mill": "Satia Industries Limited", "poDate": "2026-05-23", "items": [{"id": "i1", "product": "SATIA A4 70 GSM", "orderQty": 11990.0, "unit": "Kg", "rate": 69.0, "invoiceQty": null}, {"id": "i2", "product": "SATIA A4 75 GSM", "orderQty": 3042.0, "unit": "Kg", "rate": 68.5, "invoiceQty": null}], "createdAt": 1779494400000, "steps": {"PO1": {"status": "done", "planned": 1779793571232, "actual": 1779560791488}, "PO2": {"status": "done", "planned": 1779706799712, "actual": 1779562736352}, "PO3": {"status": "done", "planned": 1779706799712, "actual": 1780320233664}, "PO4": {"status": "done", "planned": 1780406580096, "actual": 1780321137408}, "PO5": {"status": "done", "planned": 1780407480384, "actual": 1780332821280}, "PO6": {"status": "done", "planned": 1780592021280, "actual": 1780335237024}}}, {"id": "PO-SP/26-27/0018", "mill": "Seth Faqir Chand Karwa & Co. (CHD)", "poDate": "2026-05-27", "items": [{"id": "i1", "product": "SPECTRA A4 75 GSM", "orderQty": 9828.0, "unit": "Kg", "rate": 72.0, "invoiceQty": null}, {"id": "i2", "product": "SPECTRA FS 75 GSM", "orderQty": 4170.0, "unit": "Kg", "rate": 72.56, "invoiceQty": null}], "createdAt": 1779840000000, "steps": {"PO1": {"status": "done", "planned": 1780057587168, "actual": 1779884853696}, "PO2": {"status": "done", "planned": 1779888453120, "actual": 1779887437920}, "PO3": {"status": "done", "planned": 1779891038208, "actual": 1779889745664}, "PO4": {"status": "done", "planned": 1779976139616, "actual": 1779895410048}, "PO5": {"status": "done", "planned": 1779981779808, "actual": 1780063299936}, "PO6": {"status": "done", "planned": 1780408899936, "actual": 1780135210656}}}, {"id": "PO-SP/26-27/0019", "mill": "Seth Faqir Chand Karwa & Co. (CHD)", "poDate": "2026-05-28", "items": [{"id": "i1", "product": "SPECTRA A4 75 GSM", "orderQty": 15210.0, "unit": "Kg", "rate": 72.0, "invoiceQty": null}], "createdAt": 1779926400000, "steps": {"PO1": {"status": "done", "planned": 1780154743968, "actual": 1779982204032}, "PO2": {"status": "done", "planned": 1779985804320, "actual": 1779983168256}, "PO3": {"status": "done", "planned": 1779986767680, "actual": 1779984279360}, "PO4": {"status": "done", "planned": 1780070639616, "actual": 1779988207104}, "PO5": {"status": "done", "planned": 1780074600192, "actual": 1780051889088}, "PO6": {"status": "done", "planned": 1780397489088, "actual": 1780136603424}}}, {"id": "PO-SP/26-27/0021", "mill": "Ruchira Papers Limited", "poDate": "2026-05-29", "items": [{"id": "i1", "product": "Rozaana A4 70 GSM", "orderQty": 5000.0, "unit": "Kg", "rate": 65.0, "invoiceQty": null}, {"id": "i2", "product": "Rozaana A4 75 GSM", "orderQty": 5000.0, "unit": "Kg", "rate": 65.0, "invoiceQty": null}, {"id": "i3", "product": "Tarang Yellow A4 75 GSM", "orderQty": 4500.0, "unit": "Kg", "rate": 76.92, "invoiceQty": null}, {"id": "i4", "product": "Tarang Pink A4 75 GSM", "orderQty": 3500.0, "unit": "Kg", "rate": 76.92, "invoiceQty": null}, {"id": "i5", "product": "Tarang Green A4 75 GSM", "orderQty": 3500.0, "unit": "Kg", "rate": 76.92, "invoiceQty": null}, {"id": "i6", "product": "Tarang Blue A4 75 GSM", "orderQty": 2500.0, "unit": "Kg", "rate": 76.92, "invoiceQty": null}], "createdAt": 1780012800000, "steps": {"PO1": {"status": "done", "planned": 1780336495008, "actual": 1780077688992}, "PO2": {"status": "done", "planned": 1780138799712, "actual": 1780079317632}, "PO3": {"status": "done", "planned": 1780138799712, "actual": 1780081472448}, "PO4": {"status": "done", "planned": 1780167839616, "actual": 1780143457536}, "PO5": {"status": "done", "planned": 1780316220384, "actual": 1780306922880}, "PO6": {"status": "done", "planned": 1780567200288, "actual": 1780308637920}}}, {"id": "PO-SP/26-27/0022", "mill": "Andhra Paper Limited", "poDate": "2026-05-29", "items": [{"id": "i1", "product": "Reflection White A4 70 GSM", "orderQty": 6549.0, "unit": "Kg", "rate": 74.636, "invoiceQty": null}, {"id": "i2", "product": "Reflection A4 70 GSM", "orderQty": 6549.0, "unit": "Kg", "rate": 73.636, "invoiceQty": null}, {"id": "i3", "product": "Reflection A3 70 GSM", "orderQty": 436.6, "unit": "Kg", "rate": 74.636, "invoiceQty": null}, {"id": "i4", "product": "Reflection FS 70 GSM", "orderQty": 519.2, "unit": "Kg", "rate": 74.636, "invoiceQty": null}, {"id": "i5", "product": "Superprint A4 70 GSM", "orderQty": 2183.0, "unit": "Kg", "rate": 70.736, "invoiceQty": null}], "createdAt": 1780012800000, "steps": {"PO1": {"status": "done", "planned": 1780671810816, "actual": 1780499149056}, "PO2": {"status": "done", "planned": 1780502749344, "actual": 1780500274848}, "PO3": {"status": "done", "planned": 1780503875136, "actual": 1780501129344}, "PO4": {"status": "done", "planned": 1780587480096, "actual": 1780503140736}, "PO5": {"status": "done", "planned": 1780589520000, "actual": 1780505503776}, "PO6": {"status": "done", "planned": 1780764703776, "actual": 1780566043392}}}, {"id": "PO-SP/26-27/0023", "mill": "Andhra Paper Limited", "poDate": "2026-05-29", "items": [{"id": "i1", "product": "Reflection A4 70 GSM", "orderQty": 2183.0, "unit": "Kg", "rate": 74.636, "invoiceQty": null}, {"id": "i2", "product": "Reflection FS 70 GSM", "orderQty": 1817.2, "unit": "Kg", "rate": 71.636, "invoiceQty": null}], "createdAt": 1780012800000, "steps": {"PO1": {"status": "done", "planned": 1780671918816, "actual": 1780499165472}, "PO2": {"status": "done", "planned": 1780502765760, "actual": 1780500142656}, "PO3": {"status": "done", "planned": 1780503742944, "actual": 1780501209696}, "PO4": {"status": "done", "planned": 1780587600192, "actual": 1780503127776}, "PO5": {"status": "done", "planned": 1780589520000, "actual": 1780505385408}, "PO6": {"status": "done", "planned": 1780764585408, "actual": 1780566271488}}}, {"id": "PO-SP/26-27/0024", "mill": "Satia Industries Limited", "poDate": "2026-06-04", "items": [{"id": "i1", "product": "SATIA A4 70 GSM", "orderQty": 10000.0, "unit": "Kg", "rate": 68.0, "invoiceQty": 10028.0}], "createdAt": 1780531200000, "steps": {"PO1": {"status": "done", "planned": 1780760172096, "actual": 1780590867840}, "PO2": {"status": "done", "planned": 1780594468128, "actual": 1780673159520}, "PO3": {"status": "done", "planned": 1780676759808, "actual": 1780681031424}, "PO4": {"status": "done", "planned": 1780767420192, "actual": 1780683429888}, "PO5": {"status": "done", "planned": 1780769820384, "actual": 1780748809632}, "PO6": {"status": "done", "planned": 1781094409632, "actual": 1781092409472}}}, {"id": "PO-SP/26-27/0025", "mill": "Khanna Paper Mills LTD", "poDate": "2026-06-04", "items": [{"id": "i1", "product": "KHANNA A4 ECOPY (S) 75 GSM", "orderQty": 12000.0, "unit": "Kg", "rate": 67.62, "invoiceQty": null}, {"id": "i2", "product": "KHANNA A3 KBOLT (S) 65 GSM", "orderQty": 8000.0, "unit": "Kg", "rate": 68.62, "invoiceQty": null}], "createdAt": 1780531200000, "steps": {"PO1": {"status": "done", "planned": 1780761036096, "actual": 1780590881664}, "PO2": {"status": "done", "planned": 1780594481088, "actual": 1780936599168}, "PO3": {"status": "done", "planned": 1780940199456, "actual": 1780938891360}, "PO4": {"status": "done", "planned": 1781025240384, "actual": 1780940051712}, "PO5": {"status": "done", "planned": 1781026439616, "actual": 1781091898848}, "PO6": {"status": "done", "planned": 1781351098848, "actual": 1781111696544}}}, {"id": "PO-SP/26-27/0026", "mill": "N R Agarwal Industries Limited", "poDate": "2026-06-08", "items": [{"id": "i1", "product": "N R COPIER A4 70 GSM", "orderQty": 3270.0, "unit": "Kg", "rate": 63.0, "invoiceQty": null}, {"id": "i2", "product": "N R COPIER A4 75 GSM", "orderQty": 26910.0, "unit": "Kg", "rate": 63.0, "invoiceQty": null}], "createdAt": 1780876800000, "steps": {"PO1": {"status": "done", "planned": 1781089679232, "actual": 1780936325280}, "PO2": {"status": "done", "planned": 1780939925568, "actual": 1780940110464}, "PO3": {"status": "done", "planned": 1781001310176, "actual": 1780945648704}, "PO4": {"status": "done", "planned": 1781032020192, "actual": 1781007643296}, "PO5": {"status": "done", "planned": 1781094000096, "actual": 1781183626272}, "PO6": {"status": "done", "planned": 1781529226272, "actual": 1781184375360}}}, {"id": "PO-SP/26-27/0027", "mill": "N R Agarwal Industries Limited", "poDate": "2026-06-08", "items": [{"id": "i1", "product": "N R COPIER A4 70 GSM", "orderQty": 3270.0, "unit": "Kg", "rate": 63.0, "invoiceQty": null}, {"id": "i2", "product": "N R COPIER A4 75 GSM", "orderQty": 22230.0, "unit": "Kg", "rate": 63.0, "invoiceQty": null}], "createdAt": 1780876800000, "steps": {"PO1": {"status": "done", "planned": 1781089775136, "actual": 1780936319232}, "PO2": {"status": "done", "planned": 1780939919520, "actual": 1781007819552}, "PO3": {"status": "done", "planned": 1781011419840, "actual": 1781008976448}, "PO4": {"status": "done", "planned": 1781095320288, "actual": 1781020525536}, "PO5": {"status": "done", "planned": 1781193299616, "actual": 1781517153600}, "PO6": {"status": "done", "planned": 1781776800288, "actual": 1781529088032}}}, {"id": "PO-SP/26-27/0028", "mill": "Satia Industries Limited", "poDate": "2026-06-08", "items": [{"id": "i1", "product": "SATIA A4 70 GSM", "orderQty": 8000.0, "unit": "Kg", "rate": 68.0, "invoiceQty": null}, {"id": "i2", "product": "SATIA A4 75 GSM", "orderQty": 2000.0, "unit": "Kg", "rate": 67.5, "invoiceQty": null}], "createdAt": 1780876800000, "steps": {"PO1": {"status": "done", "planned": 1781356049568, "actual": 1781184468672}, "PO2": {"status": "done", "planned": 1781188068960, "actual": 1781186384160}, "PO3": {"status": "done", "planned": 1781189984448, "actual": 1781190483840}, "PO4": {"status": "done", "planned": 1781276880384, "actual": 1781193749760}, "PO5": {"status": "done", "planned": 1781280120384, "actual": 1781530848000}, "PO6": {"status": "done", "planned": 1781790048000, "actual": 1781533769184}}}, {"id": "PO-SP/26-27/0029", "mill": "N R Agarwal Industries Limited", "poDate": "2026-06-13", "items": [{"id": "i1", "product": "N R COPIER A4 75 GSM", "orderQty": 30000.0, "unit": "Kg", "rate": 63.0, "invoiceQty": 29394.2}], "createdAt": 1781308800000, "steps": {"PO1": {"status": "done", "planned": 1781625051648, "actual": 1781545846176}, "PO2": {"status": "done", "planned": 1781607046752, "actual": 1781973686880}, "PO3": {"status": "done", "planned": 1781977287168, "actual": 1781975388096}, "PO4": {"status": "done", "planned": 1782148139712, "actual": 1781977669056}, "PO5": {"status": "done", "planned": 1782236819808, "actual": 1782208291392}, "PO6": {"status": "done", "planned": 1782468000288, "actual": 1782558043776}}}, {"id": "PO-SP/26-27/0030", "mill": "Satia Industries Limited", "poDate": "2026-06-15", "items": [{"id": "i1", "product": "SATIA A4 70 GSM", "orderQty": 20000.0, "unit": "Kg", "rate": 68.0, "invoiceQty": 20056.0}], "createdAt": 1781481600000, "steps": {"PO1": {"status": "done", "planned": 1781701789536, "actual": 1781545838400}, "PO2": {"status": "done", "planned": 1781607038976, "actual": 1781617544352}, "PO3": {"status": "done", "planned": 1781621143776, "actual": 1781702571456}, "PO4": {"status": "done", "planned": 1781788919616, "actual": 1781703558144}, "PO5": {"status": "done", "planned": 1781789940000, "actual": 1781727682752}, "PO6": {"status": "done", "planned": 1782122400288, "actual": 1781882670528}}}, {"id": "PO-SP/26-27/0031", "mill": "Satia Industries Limited", "poDate": "2026-06-15", "items": [{"id": "i1", "product": "SATIA A4 70 GSM", "orderQty": 18000.0, "unit": "Kg", "rate": 68.0, "invoiceQty": 16568.0}], "createdAt": 1781481600000, "steps": {"PO1": {"status": "done", "planned": 1781701841376, "actual": 1781545853952}, "PO2": {"status": "done", "planned": 1781607053664, "actual": 1782148849056}, "PO3": {"status": "done", "planned": 1782210049632, "actual": 1782150454368}, "PO4": {"status": "done", "planned": 1782236819808, "actual": 1782154681920}, "PO5": {"status": "done", "planned": 1782241080192, "actual": 1782297521856}, "PO6": {"status": "done", "planned": 1782556721856, "actual": 1782557305920}}}, {"id": "PO-SP/26-27/0032", "mill": "Satia Industries Limited", "poDate": "2026-06-15", "items": [{"id": "i1", "product": "SATIA A4 70 GSM", "orderQty": 18000.0, "unit": "Kg", "rate": 68.0, "invoiceQty": 13189.0}], "createdAt": 1781481600000, "steps": {"PO1": {"status": "done", "planned": 1781701876800, "actual": 1781545860864}, "PO2": {"status": "done", "planned": 1781607060576, "actual": 1782581646528}, "PO3": {"status": "done", "planned": 1782729246240, "actual": 1782582908832}, "PO4": {"status": "done", "planned": 1782755700192, "actual": 1782584208288}, "PO5": {"status": "done", "planned": 1782756959904, "actual": 1782733890240}, "PO6": {"status": "done", "planned": 1782993090240, "actual": 1782988177536}}}, {"id": "PO-SP/26-27/0033", "mill": "Seth Faqir Chand Karwa & Co. (CHD)", "poDate": "2026-06-16", "items": [{"id": "i1", "product": "SPECTRA A4 75 GSM", "orderQty": 14976.0, "unit": "Kg", "rate": 71.85, "invoiceQty": null}], "createdAt": 1781568000000, "steps": {"PO1": {"status": "done", "planned": 1781794635840, "actual": 1781621897184}, "PO2": {"status": "done", "planned": 1781625497472, "actual": 1781627174496}, "PO3": {"status": "done", "planned": 1781630773920, "actual": 1781631477216}, "PO4": {"status": "done", "planned": 1781717820192, "actual": 1781634488256}, "PO5": {"status": "done", "planned": 1781720879616, "actual": 1781696712672}, "PO6": {"status": "done", "planned": 1781955912672, "actual": 1781698065696}}}, {"id": "PO-SP/26-27/0034", "mill": "Ruchira Papers Limited", "poDate": "2026-06-17", "items": [{"id": "i1", "product": "Tarang Green A4 75 GSM", "orderQty": 4095.0, "unit": "Kg", "rate": 76.92, "invoiceQty": null}, {"id": "i2", "product": "Tarang Yellow A4 75 GSM", "orderQty": 2340.0, "unit": "Kg", "rate": 76.92, "invoiceQty": null}, {"id": "i3", "product": "Tarang Blue A4 75 GSM", "orderQty": 1404.0, "unit": "Kg", "rate": 76.92, "invoiceQty": null}, {"id": "i4", "product": "Tarang Pink A4 75 GSM", "orderQty": 2340.0, "unit": "Kg", "rate": 76.92, "invoiceQty": null}], "createdAt": 1781654400000, "steps": {"PO1": {"status": "done", "planned": 1781891521344, "actual": 1781719200864}, "PO2": {"status": "done", "planned": 1781780399712, "actual": 1781723286720}, "PO3": {"status": "done", "planned": 1781780399712, "actual": 1781808391584}, "PO4": {"status": "done", "planned": 1781894759616, "actual": 1781809376544}, "PO5": {"status": "done", "planned": 1781982120384, "actual": 1781972231040}, "PO6": {"status": "done", "planned": 1782317831040, "actual": 1782577442304}}, "_legacySharedInvoiceQty": 10179.0}, {"id": "PO-SP/26-27/0035", "mill": "Ruchira Papers Limited", "poDate": "2026-06-23", "items": [{"id": "i1", "product": "Tarang Pink A4 75 GSM", "orderQty": 2574.0, "unit": "Kg", "rate": 76.07, "invoiceQty": null}, {"id": "i2", "product": "Tarang Yellow A4 75 GSM", "orderQty": 6084.0, "unit": "Kg", "rate": 76.07, "invoiceQty": null}, {"id": "i3", "product": "Tarang Green A4 75 GSM", "orderQty": 4914.0, "unit": "Kg", "rate": 76.07, "invoiceQty": null}, {"id": "i4", "product": "Tarang Blue A4 75 GSM", "orderQty": 1404.0, "unit": "Kg", "rate": 76.07, "invoiceQty": null}], "createdAt": 1782172800000, "steps": {"PO1": {"status": "done", "planned": 1782410400000, "actual": 1782240988608}, "PO2": {"status": "done", "planned": 1782298799712, "actual": 1782301015008}, "PO3": {"status": "done", "planned": 1782304615296, "actual": 1782308126592}, "PO4": {"status": "done", "planned": 1782394499808, "actual": 1782317915712}, "PO5": {"status": "done", "planned": 1782404280288, "actual": 1782320131008}, "PO6": {"status": "done", "planned": 1782579331008, "actual": 1782557703360}}, "_legacySharedInvoiceQty": 14976.0}, {"id": "PO-SP/26-27/0036", "mill": "Khanna Paper Mills LTD", "poDate": "2026-06-23", "items": [{"id": "i1", "product": "KHANNA A4 ECOPY (S) 75 GSM", "orderQty": 12000.0, "unit": "Kg", "rate": 68.125, "invoiceQty": null}, {"id": "i2", "product": "KHANNA A4 KBOLT (S) 65 GSM", "orderQty": 8000.0, "unit": "Kg", "rate": 69.115, "invoiceQty": null}], "createdAt": 1782172800000, "steps": {"PO1": {"status": "done", "planned": 1782410400000, "actual": 1782240977376}, "PO2": {"status": "done", "planned": 1782298799712, "actual": 1782299891808}, "PO3": {"status": "done", "planned": 1782303492096, "actual": 1782307807776}, "PO4": {"status": "done", "planned": 1782394200000, "actual": 1782317885472}, "PO5": {"status": "done", "planned": 1782404280288, "actual": 1782559416672}, "PO6": {"status": "done", "planned": 1782905016672, "actual": 1782734946912}}, "_legacySharedInvoiceQty": 19980.0}, {"id": "PO-SP/26-27/0037", "mill": "N R Agarwal Industries Limited", "poDate": "2026-06-24", "items": [{"id": "i1", "product": "N R COPIER A4 70 GSM", "orderQty": 5000.0, "unit": "Kg", "rate": 63.0, "invoiceQty": null}, {"id": "i2", "product": "N R COPIER A4 75 GSM", "orderQty": 25000.0, "unit": "Kg", "rate": 63.0, "invoiceQty": null}], "createdAt": 1782259200000, "steps": {"PO1": {"status": "done", "planned": 1782476208288, "actual": 1782307556352}, "PO2": {"status": "done", "planned": 1782311155776, "actual": 1782581246496}, "PO3": {"status": "done", "planned": 1782728847072, "actual": 1782582490656}, "PO4": {"status": "done", "planned": 1782755280288, "actual": 1782584169408}, "PO5": {"status": "done", "planned": 1783016159904, "actual": 1782912418560}, "PO6": {"status": "done", "planned": 1783171618560, "actual": 1782988346880}}, "_legacySharedInvoiceQty": 29630.0}, {"id": "PO-SP/26-27/0038", "mill": "Seth Faqir Chand Karwa & Co. (LDH)", "poDate": "2026-06-24", "items": [{"id": "i1", "product": "SPECTRA A4 75 GSM", "orderQty": 11466.0, "unit": "Kg", "rate": 71.8547, "invoiceQty": null}, {"id": "i2", "product": "KHANNA A4 ECOPY (S) 75 GSM", "orderQty": 3510.0, "unit": "Kg", "rate": 67.0, "invoiceQty": null}], "createdAt": 1782259200000, "steps": {"PO1": {"status": "done", "planned": 1782492518016, "actual": 1782320999328}, "PO2": {"status": "done", "planned": 1782382199040, "actual": 1782323503200}, "PO3": {"status": "done", "planned": 1782384702912, "actual": 1782325685664}, "PO4": {"status": "done", "planned": 1782412079616, "actual": 1782391461984}, "PO5": {"status": "done", "planned": 1782477840384, "actual": 1782560082816}, "PO6": {"status": "done", "planned": 1782905682816, "actual": 1782561339072}}, "_legacySharedInvoiceQty": 14976.0}, {"id": "PO-SP/26-27/0039", "mill": "Ruchira Papers Limited", "poDate": "2026-06-24", "items": [{"id": "i1", "product": "Tarang Green A4 75 GSM", "orderQty": 3510.0, "unit": "Kg", "rate": 76.06, "invoiceQty": null}, {"id": "i2", "product": "Tarang Yellow A4 75 GSM", "orderQty": 4680.0, "unit": "Kg", "rate": 76.06, "invoiceQty": null}, {"id": "i3", "product": "Tarang Pink A4 75 GSM", "orderQty": 4680.0, "unit": "Kg", "rate": 76.06, "invoiceQty": null}, {"id": "i4", "product": "Tarang Blue A4 75 GSM", "orderQty": 2340.0, "unit": "Kg", "rate": 76.06, "invoiceQty": null}, {"id": "i5", "product": "Rozaana A4 70 GSM", "orderQty": 2180.0, "unit": "Kg", "rate": 65.0, "invoiceQty": null}, {"id": "i6", "product": "Rozaana A4 75 GSM", "orderQty": 2340.0, "unit": "Kg", "rate": 65.0, "invoiceQty": null}], "createdAt": 1782259200000, "steps": {"PO1": {"status": "done", "planned": 1782494195904, "actual": 1782321037344}, "PO2": {"status": "done", "planned": 1782382237920, "actual": 1782473891904}, "PO3": {"status": "done", "planned": 1782477492192, "actual": 1782480170592}, "PO4": {"status": "done", "planned": 1782566519616, "actual": 1782490834080}, "PO5": {"status": "done", "planned": 1782577200384, "actual": 1782561576672}, "PO6": {"status": "done", "planned": 1782907176672, "actual": 1782838956960}}, "_legacySharedInvoiceQty": 21195.0}, {"id": "PO-SP/26-27/0040", "mill": "Seth Faqir Chand Karwa & Co. (LDH)", "poDate": "2026-06-27", "items": [{"id": "i1", "product": "SPECTRA A4 75 GSM", "orderQty": 14976.0, "unit": "Kg", "rate": 71.8547, "invoiceQty": 14976.0}], "createdAt": 1782518400000, "steps": {"PO1": {"status": "done", "planned": 1782833960448, "actual": 1782574884000}, "PO2": {"status": "done", "planned": 1782578483424, "actual": 1782581168736}, "PO3": {"status": "done", "planned": 1782728769312, "actual": 1782582272064}, "PO4": {"status": "done", "planned": 1782755040096, "actual": 1782583224192}, "PO5": {"status": "done", "planned": 1782756000000, "actual": 1782812611008}, "PO6": {"status": "done", "planned": 1783072800288, "actual": 1782825473376}}}, {"id": "PO-SP/26-27/0041", "mill": "Satia Industries Limited", "poDate": "2026-06-27", "items": [{"id": "i1", "product": "SATIA A4 70 GSM", "orderQty": 7000.0, "unit": "Kg", "rate": 68.0, "invoiceQty": 7085.0}], "createdAt": 1782518400000, "steps": {"PO1": {"status": "done", "planned": 1782915706080, "actual": 1782762390144}, "PO2": {"status": "done", "planned": 1782817199712, "actual": 1782820593504}, "PO3": {"status": "done", "planned": 1782824192928, "actual": 1782914488704}, "PO4": {"status": "done", "planned": 1783000860192, "actual": 1782835885440}, "PO5": {"status": "done", "planned": 1782922260384, "actual": 1782982452672}, "PO6": {"status": "done", "planned": 1783332000288, "actual": 1782988456608}}}, {"id": "PO-SP/26-27/0042", "mill": "Seth Faqir Chand Karwa & Co. (CHD)", "poDate": "2026-06-29", "items": [{"id": "i1", "product": "SPECTRA A4 75 GSM", "orderQty": 17550.0, "unit": "Kg", "rate": 71.8547, "invoiceQty": null}, {"id": "i2", "product": "SPECTRA A3 75 GSM", "orderQty": 468.0, "unit": "Kg", "rate": 72.35, "invoiceQty": null}], "createdAt": 1782691200000, "steps": {"PO1": {"status": "done", "planned": 1782915827040, "actual": 1782757903392}, "PO2": {"status": "done", "planned": 1782817199712, "actual": 1782762460992}, "PO3": {"status": "done", "planned": 1782817199712, "actual": 1782820766304}, "PO4": {"status": "done", "planned": 1782907140384, "actual": 1782835899264}, "PO5": {"status": "done", "planned": 1782922260384, "actual": 1782914757408}, "PO6": {"status": "done", "planned": 1783173957408, "actual": 1782989007840}}, "_legacySharedInvoiceQty": 18018.0}, {"id": "PO-SP/26-27/0043", "mill": "Khanna Paper Mills LTD", "poDate": "2026-06-30", "items": [{"id": "i1", "product": "KHANNA A4 ECOPY (S) 75 GSM", "orderQty": 12004.2, "unit": "Kg", "rate": 68.125, "invoiceQty": null}, {"id": "i2", "product": "KHANNA A4 EPRINT (S) 70 GSM", "orderQty": 2005.6, "unit": "Kg", "rate": 68.62, "invoiceQty": null}, {"id": "i3", "product": "KHANNA A4 KBOLT (S) 65 GSM", "orderQty": 5999.4, "unit": "Kg", "rate": 69.115, "invoiceQty": null}], "createdAt": 1782777600000, "steps": {"PO1": {"status": "done", "planned": 1783078272864, "actual": 1782906635808}, "PO2": {"status": "done", "planned": 1782910236096, "actual": 1782909944928}, "PO3": {"status": "done", "planned": 1782913545216, "actual": 1782920442528}, "PO4": {"status": "done", "planned": 1783006800192, "actual": 1782926718624}, "PO5": {"status": "done", "planned": 1783013099616, "actual": 1783075247136}, "PO6": {"status": "done", "planned": 1783420847136, "actual": 1783187782272}}, "_legacySharedInvoiceQty": 20009.2}, {"id": "PO-SP/26-27/0044", "mill": "N R Agarwal Industries Limited", "poDate": "2026-06-30", "items": [{"id": "i1", "product": "N R COPIER A4 75 GSM", "orderQty": 21762.0, "unit": "Kg", "rate": 63.0, "invoiceQty": null}, {"id": "i2", "product": "N R COPIER A4 70 GSM", "orderQty": 3270.0, "unit": "Kg", "rate": 63.0, "invoiceQty": null}], "createdAt": 1782777600000, "steps": {"PO1": {"status": "done", "planned": 1783078443072, "actual": 1782906627168}, "PO2": {"status": "done", "planned": 1782910227456, "actual": 1782932639616}, "PO3": {"status": "done", "planned": 1782989999712, "actual": 1782988979328}, "PO4": {"status": "done", "planned": 1783075319712, "actual": 1783000048896}, "PO5": {"status": "done", "planned": 1783086420384, "actual": 1783334320992}, "PO6": {"status": "done", "planned": 1783593520992, "actual": 1783532511360}}, "_legacySharedInvoiceQty": 24661.4}, {"id": "PO-SP/26-27/0045", "mill": "Seth Faqir Chand Karwa & Co. (CHD)", "poDate": "2026-07-04", "items": [{"id": "i1", "product": "SPECTRA A4 75 GSM", "orderQty": 2925.0, "unit": "Kg", "rate": 71.855, "invoiceQty": null}, {"id": "i2", "product": "KHANNA A3 KBOLT (S) 65 GSM", "orderQty": 992.25, "unit": "Kg", "rate": 67.75, "invoiceQty": null}], "createdAt": 1783123200000, "steps": {"PO1": {"status": "done", "planned": 1783439562240, "actual": 1783180594656}, "PO2": {"status": "done", "planned": 1783184194080, "actual": 1783187339904}, "PO3": {"status": "done", "planned": 1783334939616, "actual": 1783533579264}, "PO4": {"status": "pending", "planned": 1783382400000, "actual": null}, "PO5": {"status": "pending", "planned": 1783468800000, "actual": null}, "PO6": {"status": "pending", "planned": 1783555200000, "actual": null}}, "_legacySharedInvoiceQty": 3917.25}, {"id": "PO-SP/26-27/0046", "mill": "Seth Faqir Chand Karwa & Co. (CHD)", "poDate": "2026-07-04", "items": [{"id": "i1", "product": "KHANNA A4 KBOLT (S) 65 GSM", "orderQty": 6060.0, "unit": "Kg", "rate": 67.75, "invoiceQty": 6060.0}], "createdAt": 1783123200000, "steps": {"PO1": {"status": "done", "planned": 1783439620128, "actual": 1783181645280}, "PO2": {"status": "done", "planned": 1783185245568, "actual": 1783187282016}, "PO3": {"status": "done", "planned": 1783334882592, "actual": 1783533426336}, "PO4": {"status": "pending", "planned": 1783382400000, "actual": null}, "PO5": {"status": "pending", "planned": 1783468800000, "actual": null}, "PO6": {"status": "pending", "planned": 1783555200000, "actual": null}}}, {"id": "PO-SP/26-27/0047", "mill": "Seth Faqir Chand Karwa & Co. (CHD)", "poDate": "2026-07-04", "items": [{"id": "i1", "product": "KHANNA A4 ECOPY (S) 75 GSM", "orderQty": 2340.0, "unit": "Kg", "rate": 66.75, "invoiceQty": null}, {"id": "i2", "product": "KHANNA A4 EPRINT (S) 70 GSM", "orderQty": 5450.0, "unit": "Kg", "rate": 67.25, "invoiceQty": null}, {"id": "i3", "product": "KHANNA A4 KBOLT (S) 65 GSM", "orderQty": 2222.0, "unit": "Kg", "rate": 67.75, "invoiceQty": null}, {"id": "i4", "product": "KHANNA FS 75 GSM", "orderQty": 1000.8, "unit": "Kg", "rate": 66.75, "invoiceQty": null}], "createdAt": 1783123200000, "steps": {"PO1": {"status": "done", "planned": 1783447200000, "actual": 1783189048032}, "PO2": {"status": "done", "planned": 1783335599712, "actual": 1783691449344}, "PO3": {"status": "done", "planned": 1783695048768, "actual": 1783691645472}, "PO4": {"status": "pending", "planned": 1783382400000, "actual": null}, "PO5": {"status": "pending", "planned": 1783468800000, "actual": null}, "PO6": {"status": "pending", "planned": 1783555200000, "actual": null}}, "_legacySharedInvoiceQty": 11012.8}, {"id": "PO-SP/26-27/0048", "mill": "Satia Industries Limited", "poDate": "2026-07-08", "items": [{"id": "i1", "product": "SATIA A4 70 GSM", "orderQty": 14000.0, "unit": "Kg", "rate": 68.0, "invoiceQty": null}, {"id": "i2", "product": "SATIA A3 70 GSM", "orderQty": 1000.0, "unit": "Kg", "rate": 68.0, "invoiceQty": null}], "createdAt": 1783468800000, "steps": {"PO1": {"status": "done", "planned": 1783694732544, "actual": 1783528131744}, "PO2": {"status": "done", "planned": 1783531731168, "actual": 1783690883424}, "PO3": {"status": "done", "planned": 1783694482848, "actual": 1783691294688}, "PO4": {"status": "done", "planned": 1783777680000, "actual": 1783691715456}, "PO5": {"status": "done", "planned": 1783778099904, "actual": 1783935955296}, "PO6": {"status": "done", "planned": 1784196000288, "actual": 1784135901312}}, "_legacySharedInvoiceQty": 15044.3}, {"id": "PO-SP/26-27/0049", "mill": "Satia Industries Limited", "poDate": "2026-07-08", "items": [{"id": "i1", "product": "SATIA A4 70 GSM", "orderQty": 15000.0, "unit": "Kg", "rate": 68.0, "invoiceQty": 15042.0}], "createdAt": 1783468800000, "steps": {"PO1": {"status": "done", "planned": 1783696416480, "actual": 1783528123968}, "PO2": {"status": "done", "planned": 1783531723392, "actual": 1783690915392}, "PO3": {"status": "done", "planned": 1783694515680, "actual": 1784653189344}, "PO4": {"status": "done", "planned": 1784739540096, "actual": 1784656228032}, "PO5": {"status": "done", "planned": 1784742600384, "actual": 1784813984928}, "PO6": {"status": "done", "planned": 1785159584928, "actual": 1784826739296}}}, {"id": "PO-SP/26-27/0050", "mill": "Satia Industries Limited", "poDate": "2026-07-08", "items": [{"id": "i1", "product": "SATIA A4 70 GSM", "orderQty": 15000.0, "unit": "Kg", "rate": 68.0, "invoiceQty": 15042.0}], "createdAt": 1783468800000, "steps": {"PO1": {"status": "done", "planned": 1783696579776, "actual": 1783528116192}, "PO2": {"status": "done", "planned": 1783531716480, "actual": 1783690937856}, "PO3": {"status": "done", "planned": 1783694538144, "actual": 1784653306848}, "PO4": {"status": "done", "planned": 1784739660192, "actual": 1784656247904}, "PO5": {"status": "done", "planned": 1784829000384, "actual": 1784814150816}, "PO6": {"status": "pending", "planned": 1785159750816, "actual": null}}}, {"id": "PO-SP/26-27/0051", "mill": "Ruchira Papers Limited", "poDate": "2026-07-08", "items": [{"id": "i1", "product": "Rozaana A4 75 GSM", "orderQty": 2000.0, "unit": "Kg", "rate": 65.0, "invoiceQty": null}, {"id": "i2", "product": "Rozaana A4 70 GSM", "orderQty": 3000.0, "unit": "Kg", "rate": 65.0, "invoiceQty": null}, {"id": "i3", "product": "Tarang Yellow A4 75 GSM", "orderQty": 3000.0, "unit": "Kg", "rate": 76.07, "invoiceQty": null}, {"id": "i4", "product": "Tarang Green A4 75 GSM", "orderQty": 3000.0, "unit": "Kg", "rate": 76.07, "invoiceQty": null}, {"id": "i5", "product": "Tarang Pink A4 75 GSM", "orderQty": 2000.0, "unit": "Kg", "rate": 76.07, "invoiceQty": null}, {"id": "i6", "product": "Tarang Blue A4 75 GSM", "orderQty": 2000.0, "unit": "Kg", "rate": 76.07, "invoiceQty": null}], "createdAt": 1783468800000, "steps": {"PO1": {"status": "done", "planned": 1783703359584, "actual": 1783533653568}, "PO2": {"status": "done", "planned": 1783594799712, "actual": 1783533726144}, "PO3": {"status": "done", "planned": 1783594799712, "actual": 1783691109792}, "PO4": {"status": "done", "planned": 1783777500288, "actual": 1783691694720}, "PO5": {"status": "done", "planned": 1783778040288, "actual": 1783782101952}, "PO6": {"status": "done", "planned": 1784127701952, "actual": 1784117384064}}, "_legacySharedInvoiceQty": 15093.0}, {"id": "PO-SP/26-27/0052", "mill": "N R Agarwal Industries Limited", "poDate": "2026-07-10", "items": [{"id": "i1", "product": "N R COPIER A4 70 GSM", "orderQty": 3270.0, "unit": "Kg", "rate": 63.0, "invoiceQty": null}, {"id": "i2", "product": "N R COPIER A4 75 GSM", "orderQty": 31824.0, "unit": "Kg", "rate": 63.0, "invoiceQty": null}], "createdAt": 1783641600000, "steps": {"PO1": {"status": "done", "planned": 1783948505760, "actual": 1783690335648}, "PO2": {"status": "done", "planned": 1783693935072, "actual": 1783796925600}, "PO3": {"status": "done", "planned": 1783940399712, "actual": 1783942436160}, "PO4": {"status": "pending", "planned": 1783900800000, "actual": null}, "PO5": {"status": "pending", "planned": 1783987200000, "actual": null}, "PO6": {"status": "pending", "planned": 1784073600000, "actual": null}}, "_legacySharedInvoiceQty": 29712.0}, {"id": "PO-SP/26-27/0053", "mill": "Khanna Paper Mills LTD", "poDate": "2026-07-13", "items": [{"id": "i1", "product": "KHANNA A4 ECOPY (S) 75 GSM", "orderQty": 12000.0, "unit": "Kg", "rate": 68.125, "invoiceQty": 12004.2}], "createdAt": 1783900800000, "steps": {"PO1": {"status": "done", "planned": 1784117688192, "actual": 1783955817792}, "PO2": {"status": "done", "planned": 1783959417216, "actual": 1784117022048}, "PO3": {"status": "done", "planned": 1784120621472, "actual": 1784119432608}, "PO4": {"status": "pending", "planned": 1784160000000, "actual": null}, "PO5": {"status": "pending", "planned": 1784246400000, "actual": null}, "PO6": {"status": "pending", "planned": 1784332800000, "actual": null}}}, {"id": "PO-SP/26-27/0054", "mill": "Khanna Paper Mills LTD", "poDate": "2026-07-13", "items": [{"id": "i1", "product": "KHANNA A4 EPRINT (S) 70 GSM", "orderQty": 8000.0, "unit": "Kg", "rate": 67.62, "invoiceQty": 8000.0}], "createdAt": 1783900800000, "steps": {"PO1": {"status": "done", "planned": 1784117746080, "actual": 1783955824704}, "PO2": {"status": "done", "planned": 1783959424992, "actual": 1784117051424}, "PO3": {"status": "done", "planned": 1784120650848, "actual": 1784119537152}, "PO4": {"status": "done", "planned": 1784205900000, "actual": 1784221657632}, "PO5": {"status": "done", "planned": 1784308019616, "actual": 1784293876800}, "PO6": {"status": "done", "planned": 1784639476800, "actual": 1784310204672}}}, {"id": "PO-SP/26-27/0055", "mill": "N R Agarwal Industries Limited", "poDate": "2026-07-20", "items": [{"id": "i1", "product": "N R COPIER A4 75 GSM", "orderQty": 30000.0, "unit": "Kg", "rate": 63.0, "invoiceQty": 29811.6}], "createdAt": 1784505600000, "steps": {"PO1": {"status": "done", "planned": 1784739600576, "actual": 1784743994016}, "PO2": {"status": "done", "planned": 1784804399712, "actual": 1784745817056}, "PO3": {"status": "done", "planned": 1784804399712, "actual": 1784746915200}, "PO4": {"status": "pending", "planned": 1784764800000, "actual": null}, "PO5": {"status": "pending", "planned": 1784851200000, "actual": null}, "PO6": {"status": "pending", "planned": 1784937600000, "actual": null}}}, {"id": "PO-SP/26-27/0056", "mill": "S K Enterprises", "poDate": "2026-07-24", "items": [{"id": "i1", "product": "SPECTRA A4 75 GSM", "orderQty": 12987.0, "unit": "Kg", "rate": 71.9, "invoiceQty": null}, {"id": "i2", "product": "SPECTRA FS 75 GSM", "orderQty": 1946.0, "unit": "Kg", "rate": 72.4, "invoiceQty": null}], "createdAt": 1784851200000, "steps": {"PO1": {"status": "done", "planned": 1785172588992, "actual": 1784914641792}, "PO2": {"status": "done", "planned": 1784975841504, "actual": 1784916683424}, "PO3": {"status": "done", "planned": 1784977199712, "actual": 1784918080512}, "PO4": {"status": "pending", "planned": 1785110400000, "actual": null}, "PO5": {"status": "pending", "planned": 1785196800000, "actual": null}, "PO6": {"status": "pending", "planned": 1785283200000, "actual": null}}, "_legacySharedInvoiceQty": 14933.0}];
+
+function buildStepsForOrder(o){
+  const steps = {};
+  STEPS.forEach((s,i) => {
+    steps[s.key] = {
+      status: i === 0 ? 'done' : 'pending',
+      planned: o.createdAt + s.hours*3600*1000,
+      actual: i === 0 ? o.createdAt : null
+    };
+  });
+  return steps;
+}
+
+async function loadOrders(){
+  try{
+    const cu = await window.storage.get('currentUser', false);
+    if(cu && cu.value) currentUser = cu.value;
+  }catch(e){}
+  updateLoginButtons();
+  try{
+    const existing = await backendGetOrders();
+    if(!existing || existing.length === 0){
+      await seedFromPurchaseForm();
+      return;
+    }
+    orders = existing.sort((a,b)=> b.createdAt - a.createdAt);
+  }catch(e){
+    orders = [];
+  }
+  render();
+}
+
+async function seedFromPurchaseForm(){
+  const seeded = SEED_DATA.map(o => ({
+    id: o.id, mill: o.mill, poDate: o.poDate, items: o.items,
+    createdAt: o.createdAt, steps: o.steps || buildStepsForOrder(o),
+    _legacySharedInvoiceQty: o._legacySharedInvoiceQty
+  }));
+  for(const o of seeded){ await saveOrder(o); }
+  orders = seeded.sort((a,b)=> b.createdAt - a.createdAt);
+  render();
+}
+
+async function resyncSeed(){
+  if(!confirm('Ye saari existing tracking (step status, invoice qty) reset karke Purchase Form 26-27 se dubara load karega. Continue?')) return;
+  if(!APPS_SCRIPT_URL){
+    const list = await window.storage.list('po:', false);
+    if(list && list.keys){
+      for(const k of list.keys){ try{ await window.storage.delete(k, false); }catch(e){} }
+    }
+  }
+  await seedFromPurchaseForm();
+}
+
+async function saveOrder(o){
+  try{
+    await backendSaveOrder(o);
+  }catch(e){
+    console.error('save failed', e);
+  }
+}
+
+function fmtMoney(n){
+  return '\u20b9' + Math.round(n).toLocaleString('en-IN');
+}
+function fmtDate(ts){
+  if(!ts) return '\u2014';
+  const d = new Date(ts);
+  return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) + ' ' + d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+}
+function orderValue(o){
+  return o.items.reduce((s,i)=> s + i.orderQty * i.rate, 0);
+}
+function currentStepIndex(o){
+  for(let i=0;i<STEPS.length;i++){ if(o.steps[STEPS[i].key].status !== 'done') return i; }
+  return STEPS.length;
+}
+function isStepOverdue(o, idx){
+  const st = o.steps[STEPS[idx].key];
+  if(st.status === 'done') return false;
+  return Date.now() > st.planned;
+}
+function orderHasMismatch(o){
+  return o.items.some(i => i.invoiceQty !== null && i.invoiceQty !== undefined && i.invoiceQty !== i.orderQty);
+}
+
+async function setCurrentUser(v){
+  currentUser = v;
+  try{ await window.storage.set('currentUser', v, false); }catch(e){}
+  updateLoginButtons();
+  render();
+}
+
+function updateLoginButtons(){
+  ['all','satijapaper@gmail.com','poojasatijapaper@gmail.com'].forEach(v => {
+    const id = v === 'all' ? 'btn-all' : (v === 'satijapaper@gmail.com' ? 'btn-sandeep' : 'btn-pooja');
+    const el = document.getElementById(id);
+    if(el) el.className = (v === currentUser) ? 'btn small' : 'btn ghost small';
+  });
+}
+
+function visibleOrders(){
+  const notDone = orders.filter(o => currentStepIndex(o) < STEPS.length);
+  if(currentUser === 'all') return notDone;
+  return notDone.filter(o => STEPS[currentStepIndex(o)].doerEmail === currentUser);
+}
+
+function render(){
+  renderStats();
+  renderPanel();
+}
+
+function renderStats(){
+  const vis = visibleOrders();
+  const open = vis.length;
+  const overdue = vis.filter(o => isStepOverdue(o, currentStepIndex(o))).length;
+  const mismatches = vis.filter(orderHasMismatch).length;
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><div class="num">${open}</div><div class="lbl">Pending orders</div></div>
+    <div class="stat ${overdue>0?'danger':''}"><div class="num">${overdue}</div><div class="lbl">Overdue right now</div></div>
+    <div class="stat ${mismatches>0?'warn':''}"><div class="num">${mismatches}</div><div class="lbl">Qty mismatches</div></div>
+  `;
+}
+
+function renderTaskCard(o){
+  const idx = currentStepIndex(o);
+  const s = STEPS[idx];
+  const st = o.steps[s.key];
+  const overdue = isStepOverdue(o, idx);
+  const itemsLine = o.items.map(it => `${it.product} (${it.orderQty} ${it.unit})`).join(', ');
+
+  const docInputs = s.docs.map(d => {
+    const safe = d.replace(/\s+/g,'_');
+    return `<div class="doc-row">
+      <span>${d}</span>
+      <input type="file" id="doc-${o.id}-${s.key}-${safe}" onchange="handleFileSelect(event,'${o.id}','${s.key}','${d}')">
+      <span class="ts" id="docstat-${o.id}-${s.key}-${safe}" style="min-width:80px;"></span>
+    </div>`;
+  }).join('');
+  const invInputs = s.key === 'PO3' ? o.items.map(it => `
+      <div class="inv-row">
+        <span style="flex:1;">${it.product}</span>
+        <input type="number" id="inv-${o.id}-${it.id}" value="${it.orderQty}" step="0.01">
+      </div>`).join('') : '';
+
+  return `<div class="task-card ${overdue?'overdue':''}">
+    <div class="task-head">
+      <span class="task-pid">${o.id}</span>
+      <span class="badge ${overdue?'danger':'warn'}">${s.key} \u00b7 ${s.label}${overdue?' \u00b7 overdue':''}</span>
+    </div>
+    <div class="task-sub">${o.mill} &middot; Planned: ${fmtDate(st.planned)}</div>
+    <div class="task-items">${itemsLine}</div>
+    ${invInputs}${docInputs}
+    <button class="btn small" style="margin-top:8px;" onclick="completeStep('${o.id}','${s.key}')">Mark done</button>
+  </div>`;
+}
+
+function renderPanel(){
+  const panel = document.getElementById('panel');
+  const vis = visibleOrders();
+  if(orders.length === 0){
+    panel.innerHTML = `<div class="empty"><div class="big">No purchase orders yet</div>Create your first order to start tracking it step by step.<br><br><button class="btn" onclick="openModal()">+ New purchase order</button></div>`;
+    return;
+  }
+  if(vis.length === 0){
+    panel.innerHTML = `<div class="empty"><div class="big">Koi pending kaam nahi hai</div>Sabhi orders complete hain ya kisi aur ke naam hain.</div>`;
+    return;
+  }
+  if(currentUser !== 'all'){
+    const myStepKeys = STEPS.filter(s => s.doerEmail === currentUser).map(s => s.key);
+    let html = '';
+    let anyWork = false;
+    myStepKeys.forEach(stepKey => {
+      const stepDef = STEPS.find(s => s.key === stepKey);
+      const forStep = vis.filter(o => STEPS[currentStepIndex(o)].key === stepKey);
+      if(forStep.length === 0) return;
+      anyWork = true;
+      html += `<div style="margin:22px 0 10px; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint); font-weight:600;">${stepKey} \u00b7 ${stepDef.label} <span class="mono" style="text-transform:none; letter-spacing:0;">(${forStep.length})</span></div>`;
+      html += forStep.map(o => renderTaskCard(o)).join('');
+    });
+    if(!anyWork){
+      html = `<div class="empty"><div class="big">Koi pending kaam nahi hai</div>Sabhi steps complete hain.</div>`;
+    }
+    panel.innerHTML = html;
+    return;
+  }
+  let html = `<div class="row-head"><div></div><div>PO</div><div>Mill</div><div>Value</div><div>Progress</div><div>Current step</div><div></div></div>`;
+  vis.forEach(o => {
+    const idx = currentStepIndex(o);
+    const done = idx >= STEPS.length;
+    const overdue = !done && isStepOverdue(o, idx);
+    const mismatch = orderHasMismatch(o);
+    const isOpen = !!expanded[o.id];
+    const stamps = STEPS.map((s,i) => {
+      let cls = 'tick';
+      if(o.steps[s.key].status === 'done') cls += ' done';
+      else if(i === idx && overdue) cls += ' overdue';
+      return `<div class="${cls}" title="${s.label}"></div>`;
+    }).join('');
+    let statusBadge;
+    if(done) statusBadge = `<span class="badge ok">Completed</span>`;
+    else if(overdue) statusBadge = `<span class="badge danger">Overdue \u00b7 ${STEPS[idx].label}</span>`;
+    else statusBadge = `<span class="badge warn">${STEPS[idx].label}</span>`;
+
+    html += `
+    <div class="order-row">
+      <div class="order-summary" onclick="toggleExpand('${o.id}')">
+        <div class="chev ${isOpen?'open':''}">&#9656;</div>
+        <div><div class="pid mono">${o.id}</div>${mismatch?'<div class="badge danger" style="margin-top:4px;">Qty mismatch</div>':''}</div>
+        <div>${o.mill}</div>
+        <div class="mono">${fmtMoney(orderValue(o))}</div>
+        <div class="stamp">${stamps}</div>
+        <div>${statusBadge}</div>
+        <div></div>
+      </div>
+      <div class="detail ${isOpen?'open':''}" id="detail-${o.id}">
+        ${renderDetail(o)}
+      </div>
+    </div>`;
+  });
+  panel.innerHTML = html;
+}
+
+function renderDetail(o){
+  const idx = currentStepIndex(o);
+  let legacyNote = '';
+  if(o._legacySharedInvoiceQty){
+    legacyNote = `<div class="badge danger" style="margin-bottom:8px; display:block; width:fit-content;">Purane FMS mein ek hi shared Invoice Qty thi: ${o._legacySharedInvoiceQty} Kg &mdash; ${o.items.length} items mein kaise baँटi thi pata nahi, isliye yaha khaali chhoda hai. Neeche item-wise confirm kariye.</div>`;
+  }
+  let itemsHtml = `<table class="items"><tr><th>Product</th><th>Order qty</th><th>Rate</th><th>Amount</th><th>Invoice qty</th></tr>`;
+  o.items.forEach(i => {
+    const hasInv = i.invoiceQty !== null && i.invoiceQty !== undefined;
+    const mismatch = hasInv && i.invoiceQty !== i.orderQty;
+    itemsHtml += `<tr>
+      <td>${i.product}</td>
+      <td class="mono">${i.orderQty} ${i.unit}</td>
+      <td class="mono">${i.rate}</td>
+      <td class="mono">${fmtMoney(i.orderQty*i.rate)}</td>
+      <td class="mono ${mismatch?'mismatch':''}">${hasInv ? i.invoiceQty + ' ' + i.unit + (mismatch ? ' (diff ' + (i.invoiceQty-i.orderQty) + ')' : '') : '\u2014'}</td>
+    </tr>`;
+  });
+  itemsHtml += `</table>`;
+
+  let stepsHtml = `<div class="steps">`;
+  STEPS.forEach((s,i) => {
+    const st = o.steps[s.key];
+    const overdue = st.status !== 'done' && Date.now() > st.planned;
+    let cls = 'step-card';
+    if(st.status === 'done') cls += ' done';
+    else if(i === idx) cls += ' current';
+    const plannedLine = `<div class="time">Planned: ${fmtDate(st.planned)}</div>`;
+    const doneLine = st.status === 'done'
+      ? `<div class="time">Done: ${fmtDate(st.actual)}</div>`
+      : `<div class="time ${overdue?'late':''}">Done: &mdash;${overdue?' (overdue)':''}</div>`;
+    let actionHtml = '';
+    if(i === idx && st.status !== 'done'){
+      const docInputs = s.docs.map(d => {
+        const safe = d.replace(/\s+/g,'_');
+        return `<div class="doc-row">
+          <span>${d}</span>
+          <input type="file" id="doc-${o.id}-${s.key}-${safe}" onchange="handleFileSelect(event,'${o.id}','${s.key}','${d}')">
+          <span class="ts" id="docstat-${o.id}-${s.key}-${safe}" style="min-width:80px;"></span>
+        </div>`;
+      }).join('');
+      const invInputs = s.key === 'PO3' ? o.items.map(it => `
+          <div class="inv-row">
+            <span style="flex:1;">${it.product}</span>
+            <input type="number" id="inv-${o.id}-${it.id}" value="${it.orderQty}" step="0.01">
+          </div>`).join('') : '';
+      actionHtml = `<div style="margin-top:8px;">${invInputs}${docInputs}
+          <button class="btn small" style="margin-top:6px;" onclick="completeStep('${o.id}','${s.key}')">Mark done</button>
+        </div>`;
+    } else if(st.status === 'done' && s.docs.length){
+      const chips = s.docs.map(d => {
+        const has = st.docs && st.docs[d];
+        return has ? `<a href="#" onclick="viewDoc('${o.id}','${s.key}','${d}');return false;" class="doc-chip">${d} &#8599;</a>` : `<span class="doc-chip" style="opacity:.5;">${d} missing</span>`;
+      }).join('');
+      actionHtml = `<div style="margin-top:6px;">${chips}</div>`;
+    }
+    stepsHtml += `<div class="${cls}"><div class="name">${s.key} \u00b7 ${s.label}</div><div class="ts" style="font-size:11px; color:var(--ink-faint); margin-top:2px;">${s.doerName}</div>${plannedLine}${doneLine}${actionHtml}</div>`;
+  });
+  stepsHtml += `</div>`;
+
+  return `${legacyNote}<h4>Items</h4>${itemsHtml}<h4>Steps</h4>${stepsHtml}`;
+}
+
+function handleFileSelect(evt, orderId, stepKey, docLabel){
+  const file = evt.target.files[0];
+  const safe = docLabel.replace(/\s+/g,'_');
+  const statusEl = document.getElementById(`docstat-${orderId}-${stepKey}-${safe}`);
+  if(!file) return;
+  if(file.size > 4 * 1024 * 1024){
+    if(statusEl) statusEl.textContent = 'Bahut badi file (max 4MB)';
+    evt.target.value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    pendingDocs[orderId] = pendingDocs[orderId] || {};
+    pendingDocs[orderId][stepKey] = pendingDocs[orderId][stepKey] || {};
+    pendingDocs[orderId][stepKey][docLabel] = {dataUrl: reader.result, name: file.name};
+    if(statusEl) statusEl.textContent = `\u2713 ${file.name}`;
+  };
+  reader.onerror = () => { if(statusEl) statusEl.textContent = 'Upload fail hua'; };
+  reader.readAsDataURL(file);
+}
+
+async function viewDoc(orderId, stepKey, docLabel){
+  const o = orders.find(x => x.id === orderId);
+  const docInfo = o && o.steps[stepKey].docs && o.steps[stepKey].docs[docLabel];
+  if(docInfo && docInfo.url){
+    window.open(docInfo.url, '_blank');
+    return;
+  }
+  try{
+    const key = `doc:${orderId}:${stepKey}:${docLabel}`;
+    const r = await window.storage.get(key, false);
+    if(!r){ alert('Document nahi mila'); return; }
+    const res = await fetch(r.value);
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    window.open(blobUrl, '_blank');
+  }catch(e){
+    alert('Document load nahi ho paya');
+  }
+}
+
+function toggleExpand(id){
+  expanded[id] = !expanded[id];
+  render();
+}
+
+async function completeStep(orderId, stepKey){
+  const o = orders.find(x => x.id === orderId);
+  if(!o) return;
+  const stepDef = STEPS.find(s => s.key === stepKey);
+
+  if(stepKey === 'PO3'){
+    o.items.forEach(it => {
+      const el = document.getElementById(`inv-${orderId}-${it.id}`);
+      if(el && el.value !== '') it.invoiceQty = parseFloat(el.value);
+    });
+  }
+
+  const uploaded = (pendingDocs[orderId] && pendingDocs[orderId][stepKey]) || {};
+  let missing = [];
+  stepDef.docs.forEach(d => { if(!uploaded[d]) missing.push(d); });
+  if(missing.length){
+    if(!confirm(`${missing.join(', ')} upload nahi hui. Bina doc ke bhi step complete karein?`)) return;
+  }
+
+  const docsFlag = {};
+  for(const d of Object.keys(uploaded)){
+    try{
+      const result = await backendUploadDoc(orderId, stepKey, d, uploaded[d].name, uploaded[d].dataUrl.split(';')[0].split(':')[1], uploaded[d].dataUrl);
+      docsFlag[d] = { name: uploaded[d].name, url: result.url || null };
+    }catch(e){
+      console.error('doc save failed', e);
+    }
+  }
+
+  o.steps[stepKey].status = 'done';
+  o.steps[stepKey].actual = Date.now();
+  if(Object.keys(docsFlag).length) o.steps[stepKey].docs = docsFlag;
+  if(pendingDocs[orderId]) delete pendingDocs[orderId][stepKey];
+  await saveOrder(o);
+  render();
+}
+
+function openModal(){
+  document.getElementById('modalBg').classList.add('open');
+  document.getElementById('itemRows').innerHTML = '';
+  itemRowCount = 0;
+  addItemRow();
+  document.getElementById('f-date').value = new Date().toISOString().slice(0,10);
+}
+function closeModal(){
+  document.getElementById('modalBg').classList.remove('open');
+}
+function addItemRow(){
+  itemRowCount++;
+  const id = 'row' + itemRowCount;
+  const div = document.createElement('div');
+  div.className = 'item-grid';
+  div.id = id;
+  div.innerHTML = `
+    <input placeholder="Product name" class="p-name">
+    <input placeholder="Qty" type="number" class="p-qty">
+    <input placeholder="Rate/unit" type="number" class="p-rate">
+    <button class="rm" onclick="document.getElementById('${id}').remove()">&times;</button>
+  `;
+  document.getElementById('itemRows').appendChild(div);
+}
+
+async function submitOrder(){
+  const mill = document.getElementById('f-mill').value.trim();
+  const date = document.getElementById('f-date').value;
+  if(!mill){ alert('Mill name daaliye'); return; }
+  const rows = document.querySelectorAll('#itemRows .item-grid');
+  const items = [];
+  let itemId = 0;
+  rows.forEach(r => {
+    const name = r.querySelector('.p-name').value.trim();
+    const qty = parseFloat(r.querySelector('.p-qty').value);
+    const rate = parseFloat(r.querySelector('.p-rate').value);
+    if(name && qty && rate){
+      itemId++;
+      items.push({id:'i'+itemId, product:name, orderQty:qty, unit:'Kg', rate:rate, invoiceQty:null});
+    }
+  });
+  if(items.length === 0){ alert('Kam se kam ek item daaliye'); return; }
+
+  const now = Date.now();
+  let maxNum = 0;
+  orders.forEach(o => {
+    const m = o.id.match(/(\d+)$/);
+    if(m) maxNum = Math.max(maxNum, parseInt(m[1]));
+  });
+  const poNum = String(maxNum + 1).padStart(4,'0');
+  const order = {
+    id: 'PO-SP/26-27/' + poNum,
+    mill, poDate: date, items, createdAt: now
+  };
+  order.steps = buildStepsForOrder(order);
+  orders.unshift(order);
+  await saveOrder(order);
+  closeModal();
+  render();
+}
+
+loadOrders();
+</script>
+</body>
+</html>
