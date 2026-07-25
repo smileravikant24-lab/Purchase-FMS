@@ -257,6 +257,7 @@ async function seedFromPurchaseForm(){
 }
 
 async function resyncSeed(){
+  if(!confirm('Ye saari existing tracking (step status, invoice qty) reset karke Purchase Form 26-27 se dubara load karega. Continue?')) return;
   if(!APPS_SCRIPT_URL){
     const list = await window.storage.list('po:', false);
     if(list && list.keys){
