@@ -114,6 +114,7 @@
     </div>
     <div style="display:flex; gap:8px; align-items:center;">
       <button class="btn ghost small" onclick="resyncSeed()" title="Reload new POs from the Purchase Form">&#8635; Resync from Purchase Form</button>
+      <button class="btn ghost small" onclick="dedupeOrders()" title="Remove duplicate PO rows, keeping the most complete version">Clean up duplicates</button>
       <a class="btn ghost" href="https://script.google.com/a/macros/satijapaper.com/s/AKfycbxQNUAtVUGNGBNQBH6sQy_67tmCyiruYf9-quHGxNQKKTkzs9ZeBIIQvV7DEOBCN6m9/exec" target="_blank" style="text-decoration:none; display:inline-block;">Fill Purchase Form &#8599;</a>
     </div>
   </header>
@@ -305,7 +306,8 @@ async function seedFromPurchaseForm(){
 async function resyncSeed(){
   if(APPS_SCRIPT_URL){
     const result = await apiCall({action:'resync'});
-    alert(`${result.added || 0} new orders found from the Purchase Form (checked ${result.totalInForm || 0} total).`);
+    const fmsNote = result.oldFmsAvailable === false ? ' (old FMS not reachable, skipped)' : '';
+    alert(`${result.added || 0} new orders found. ${result.statusUpdated || 0} orders had steps updated from the old FMS${fmsNote}.`);
     await loadOrders();
     return;
   }
@@ -315,6 +317,17 @@ async function resyncSeed(){
     for(const k of list.keys){ try{ await window.storage.delete(k, false); }catch(e){} }
   }
   await seedFromPurchaseForm();
+}
+
+async function dedupeOrders(){
+  if(!APPS_SCRIPT_URL){
+    alert('This only works once the Apps Script backend is connected.');
+    return;
+  }
+  if(!confirm('This will remove duplicate PO rows, keeping the most complete version of each. Continue?')) return;
+  const result = await apiCall({action:'dedupe'});
+  alert(`Cleaned up. ${result.totalUnique || 0} unique orders remain.`);
+  await loadOrders();
 }
 
 async function saveOrder(o){
