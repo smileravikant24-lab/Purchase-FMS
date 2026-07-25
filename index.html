@@ -119,12 +119,7 @@
   </header>
   <div class="sub" style="margin:-18px 0 14px;">Data source: <span class="mono">Purchase Form 26-27</span> &middot; <a href="https://docs.google.com/spreadsheets/d/1bzFrGTL-oaGrrjyXgI8WJuKOzgJG2-9jcD8r80QR73w/edit" target="_blank" style="color:var(--accent);">Sheet kholiye &#8599;</a></div>
 
-  <div id="loginBanner" style="display:flex; align-items:center; gap:10px; margin-bottom:18px; flex-wrap:wrap; padding:12px 14px; border:1px solid var(--border); border-radius:10px; background:var(--surface);">
-    <span class="sub" style="margin:0; font-weight:600;">Aap kaun hain?</span>
-    <button class="btn small" id="btn-all" onclick="setCurrentUser('all')">Admin (sabhi dekhein)</button>
-    <button class="btn ghost small" id="btn-sandeep" onclick="setCurrentUser('satijapaper@gmail.com')">Sandeep ji</button>
-    <button class="btn ghost small" id="btn-pooja" onclick="setCurrentUser('poojasatijapaper@gmail.com')">Pooja ji</button>
-  </div>
+  <div id="loginBanner" style="display:flex; align-items:center; gap:10px; margin-bottom:18px; flex-wrap:wrap; padding:12px 14px; border:1px solid var(--border); border-radius:10px; background:var(--surface);"></div>
 
   <div class="stats" id="stats"></div>
   <div class="panel" id="panel"></div>
@@ -163,6 +158,11 @@ const STEPS = [
   {key:'PO6', label:'Transporter + GR', hours:120, doerName:'Ms. Pooja', doerEmail:'poojasatijapaper@gmail.com', docs:['E-Way Bill','GR Copy']},
 ];
 const PURCHASE_FORM_URL = 'https://docs.google.com/spreadsheets/d/1bzFrGTL-oaGrrjyXgI8WJuKOzgJG2-9jcD8r80QR73w/edit';
+// System master: login email -> jo dikhna chahiye. Naya user add karna ho to yaha entry badhaiye.
+const USER_MASTER = {
+  'satijapaper@gmail.com': 'Sandeep ji',
+  'poojasatijapaper@gmail.com': 'Pooja ji'
+};
 let currentUser = 'all';
 let pendingDocs = {};
 
@@ -230,11 +230,8 @@ function buildStepsForOrder(o){
 }
 
 async function loadOrders(){
-  try{
-    const cu = await window.storage.get('currentUser', false);
-    if(cu && cu.value) currentUser = cu.value;
-  }catch(e){}
-  updateLoginButtons();
+  currentUser = resolveIdentity();
+  renderIdentityBanner();
   try{
     const existing = await backendGetOrders();
     if(!existing || existing.length === 0){
@@ -302,19 +299,83 @@ function orderHasMismatch(o){
   return o.items.some(i => i.invoiceQty !== null && i.invoiceQty !== undefined && i.invoiceQty !== i.orderQty);
 }
 
-async function setCurrentUser(v){
+// Google login se detect karna possible nahi tha, isliye har user ko uske
+// naam ka ek fixed URL (?user=email) diya jaata hai — wo link kholte hi
+// bind ho jaata hai. Ek baar bind hone ke baad localStorage mein bhi yaad
+// rehta hai, isliye baar-baar link se hi kholna zaroori nahi.
+const IDENTITY_KEY = 'poFmsIdentity';
+
+function personLoginUrl(email){
+  const base = window.location.href.split('?')[0].split('#')[0];
+  return base + '?user=' + encodeURIComponent(email);
+}
+
+function getUrlIdentity(){
+  try{
+    const email = (new URLSearchParams(window.location.search).get('user') || '').toLowerCase().trim();
+    return USER_MASTER[email] ? email : '';
+  }catch(e){ return ''; }
+}
+
+function getBoundIdentity(){
+  try{ return localStorage.getItem(IDENTITY_KEY) || ''; }catch(e){ return ''; }
+}
+function setBoundIdentity(v){
+  try{ localStorage.setItem(IDENTITY_KEY, v); }catch(e){}
+}
+function clearBoundIdentity(){
+  try{ localStorage.removeItem(IDENTITY_KEY); }catch(e){}
+}
+
+function resolveIdentity(){
+  const urlId = getUrlIdentity();
+  if(urlId){ setBoundIdentity(urlId); return urlId; }
+  const v = getBoundIdentity();
+  return (v === 'all' || USER_MASTER[v]) ? v : '';
+}
+
+async function bindIdentity(v){
+  setBoundIdentity(v);
   currentUser = v;
-  try{ await window.storage.set('currentUser', v, false); }catch(e){}
-  updateLoginButtons();
+  renderIdentityBanner();
   render();
 }
 
-function updateLoginButtons(){
-  ['all','satijapaper@gmail.com','poojasatijapaper@gmail.com'].forEach(v => {
-    const id = v === 'all' ? 'btn-all' : (v === 'satijapaper@gmail.com' ? 'btn-sandeep' : 'btn-pooja');
-    const el = document.getElementById(id);
-    if(el) el.className = (v === currentUser) ? 'btn small' : 'btn ghost small';
-  });
+function switchIdentity(){
+  clearBoundIdentity();
+  currentUser = '';
+  renderIdentityBanner();
+  render();
+}
+
+function renderIdentityBanner(){
+  const el = document.getElementById('loginBanner');
+  if(!el) return;
+  if(!currentUser){
+    el.innerHTML = `
+      <span class="sub" style="margin:0; font-weight:600;">Login:</span>
+      <input type="email" id="loginEmail" placeholder="aapki email" style="padding:8px 10px; border:1px solid var(--border-strong); border-radius:7px; font-size:13.5px; font-family:inherit; flex:1; min-width:200px;">
+      <button class="btn small" onclick="loginWithEmail()">Login</button>
+    `;
+    const inp = document.getElementById('loginEmail');
+    if(inp) inp.addEventListener('keydown', e => { if(e.key === 'Enter') loginWithEmail(); });
+  } else {
+    let extra = '';
+    if(currentUser === 'all'){
+      const links = Object.keys(USER_MASTER).map(email =>
+        `<a href="${personLoginUrl(email)}" target="_blank" style="margin-left:10px; font-size:12px;">${USER_MASTER[email]} ka link &#8599;</a>`
+      ).join('');
+      extra = `<span class="sub" style="margin:0 0 0 auto;">${links}</span>`;
+    }
+    el.innerHTML = `<span class="sub" style="margin:0; font-weight:600;">Aap:</span><span class="badge ok">${USER_MASTER[currentUser] || 'Admin (sabhi dekhein)'}</span>${extra}<button class="btn ghost small" ${currentUser==='all'?'':'style="margin-left:auto;"'} onclick="switchIdentity()">Logout</button>`;
+  }
+}
+
+function loginWithEmail(){
+  const inp = document.getElementById('loginEmail');
+  const email = ((inp && inp.value) || '').toLowerCase().trim();
+  if(!email) return;
+  bindIdentity(USER_MASTER[email] ? email : 'all');
 }
 
 function visibleOrders(){
@@ -533,13 +594,13 @@ async function viewDoc(orderId, stepKey, docLabel){
   try{
     const key = `doc:${orderId}:${stepKey}:${docLabel}`;
     const r = await window.storage.get(key, false);
-    if(!r){ alert('Document nahi mila'); return; }
+    if(!r) return;
     const res = await fetch(r.value);
     const blob = await res.blob();
     const blobUrl = URL.createObjectURL(blob);
     window.open(blobUrl, '_blank');
   }catch(e){
-    alert('Document load nahi ho paya');
+    console.error('Document load nahi ho paya', e);
   }
 }
 
@@ -551,7 +612,6 @@ function toggleExpand(id){
 async function completeStep(orderId, stepKey){
   const o = orders.find(x => x.id === orderId);
   if(!o) return;
-  const stepDef = STEPS.find(s => s.key === stepKey);
 
   if(stepKey === 'PO3'){
     o.items.forEach(it => {
@@ -561,11 +621,6 @@ async function completeStep(orderId, stepKey){
   }
 
   const uploaded = (pendingDocs[orderId] && pendingDocs[orderId][stepKey]) || {};
-  let missing = [];
-  stepDef.docs.forEach(d => { if(!uploaded[d]) missing.push(d); });
-  if(missing.length){
-    if(!confirm(`${missing.join(', ')} upload nahi hui. Bina doc ke bhi step complete karein?`)) return;
-  }
 
   const docsFlag = {};
   for(const d of Object.keys(uploaded)){
@@ -613,7 +668,7 @@ function addItemRow(){
 async function submitOrder(){
   const mill = document.getElementById('f-mill').value.trim();
   const date = document.getElementById('f-date').value;
-  if(!mill){ alert('Mill name daaliye'); return; }
+  if(!mill) return;
   const rows = document.querySelectorAll('#itemRows .item-grid');
   const items = [];
   let itemId = 0;
@@ -626,7 +681,7 @@ async function submitOrder(){
       items.push({id:'i'+itemId, product:name, orderQty:qty, unit:'Kg', rate:rate, invoiceQty:null});
     }
   });
-  if(items.length === 0){ alert('Kam se kam ek item daaliye'); return; }
+  if(items.length === 0) return;
 
   const now = Date.now();
   let maxNum = 0;
