@@ -119,10 +119,7 @@
   </header>
   <div class="sub" style="margin:-18px 0 14px;">Data source: <span class="mono">Purchase Form 26-27</span> &middot; <a href="https://docs.google.com/spreadsheets/d/1bzFrGTL-oaGrrjyXgI8WJuKOzgJG2-9jcD8r80QR73w/edit" target="_blank" style="color:var(--accent);">Sheet kholiye &#8599;</a></div>
 
-  <div id="loginBanner" style="display:flex; align-items:center; gap:10px; margin-bottom:18px; flex-wrap:wrap; padding:12px 14px; border:1px solid var(--border); border-radius:10px; background:var(--surface);">
-    <span class="sub" style="margin:0; font-weight:600;">Aap:</span>
-    <span class="badge ok" id="identityBadge">&hellip;</span>
-  </div>
+  <div id="loginBanner" style="display:flex; align-items:center; gap:10px; margin-bottom:18px; flex-wrap:wrap; padding:12px 14px; border:1px solid var(--border); border-radius:10px; background:var(--surface);"></div>
 
   <div class="stats" id="stats"></div>
   <div class="panel" id="panel"></div>
@@ -233,8 +230,8 @@ function buildStepsForOrder(o){
 }
 
 async function loadOrders(){
-  currentUser = await detectCurrentUser();
-  renderIdentityBadge();
+  currentUser = loadBoundIdentity();
+  renderIdentityBanner();
   try{
     const existing = await backendGetOrders();
     if(!existing || existing.length === 0){
@@ -301,22 +298,51 @@ function orderHasMismatch(o){
   return o.items.some(i => i.invoiceQty !== null && i.invoiceQty !== undefined && i.invoiceQty !== i.orderQty);
 }
 
-// Manual user-switch button hata diya hai — login jis mail se hua hai, usी se filter hota hai.
-async function detectCurrentUser(){
-  if(APPS_SCRIPT_URL){
-    try{
-      const data = await apiCall({action:'whoami'});
-      const email = ((data && data.email) || '').toLowerCase().trim();
-      if(USER_MASTER[email]) return email;
-    }catch(e){}
-  }
-  return 'all';
+// Google login se detect karna possible nahi tha, isliye ek baar device pe
+// pick karke wahi permanently yaad rakha jaata hai (localStorage), USER_MASTER
+// ke mapping ke through.
+const IDENTITY_KEY = 'poFmsIdentity';
+
+function getBoundIdentity(){
+  try{ return localStorage.getItem(IDENTITY_KEY) || ''; }catch(e){ return ''; }
+}
+function setBoundIdentity(v){
+  try{ localStorage.setItem(IDENTITY_KEY, v); }catch(e){}
+}
+function clearBoundIdentity(){
+  try{ localStorage.removeItem(IDENTITY_KEY); }catch(e){}
 }
 
-function renderIdentityBadge(){
-  const el = document.getElementById('identityBadge');
+function loadBoundIdentity(){
+  const v = getBoundIdentity();
+  return (v === 'all' || USER_MASTER[v]) ? v : '';
+}
+
+async function bindIdentity(v){
+  setBoundIdentity(v);
+  currentUser = v;
+  renderIdentityBanner();
+  render();
+}
+
+function switchIdentity(){
+  clearBoundIdentity();
+  currentUser = '';
+  renderIdentityBanner();
+  render();
+}
+
+function renderIdentityBanner(){
+  const el = document.getElementById('loginBanner');
   if(!el) return;
-  el.textContent = USER_MASTER[currentUser] || 'Admin (sabhi dekhein)';
+  if(!currentUser){
+    const picks = Object.keys(USER_MASTER).map(email =>
+      `<button class="btn small" onclick="bindIdentity('${email}')">${USER_MASTER[email]}</button>`
+    ).join('');
+    el.innerHTML = `<span class="sub" style="margin:0; font-weight:600;">Aap kaun hain? (ek baar chuniye, is device pe yaad rahega)</span>${picks}<button class="btn ghost small" onclick="bindIdentity('all')">Admin (sabhi dekhein)</button>`;
+  } else {
+    el.innerHTML = `<span class="sub" style="margin:0; font-weight:600;">Aap:</span><span class="badge ok">${USER_MASTER[currentUser] || 'Admin (sabhi dekhein)'}</span><button class="btn ghost small" style="margin-left:auto;" onclick="switchIdentity()">Badlein</button>`;
+  }
 }
 
 function visibleOrders(){
