@@ -201,8 +201,12 @@ async function onGoogleSignIn(response){
 
 function signOutUser(){
   currentUser = 'all';
+  signedIn = false;
   document.getElementById('signedInView').style.display = 'none';
   document.getElementById('signedOutView').style.display = 'flex';
+  document.getElementById('adminSwitcher').style.display = 'none';
+  document.getElementById('stats').innerHTML = '';
+  document.getElementById('panel').innerHTML = '<div class="empty"><div class="big">Please sign in first</div>Your data will appear after signing in with the Google button above.</div>';
   if(window.google) google.accounts.id.disableAutoSelect();
 }
 
@@ -421,7 +425,7 @@ function renderPanel(){
   const panel = document.getElementById('panel');
   const vis = visibleOrders();
   if(orders.length === 0){
-    panel.innerHTML = `<div class="empty"><div class="big">No purchase orders yet</div>Naya order banane ke liye Purchase Form use kariye.<br><br><a class="btn" href="https://script.google.com/a/macros/satijapaper.com/s/AKfycbxQNUAtVUGNGBNQBH6sQy_67tmCyiruYf9-quHGxNQKKTkzs9ZeBIIQvV7DEOBCN6m9/exec" target="_blank" style="text-decoration:none;">Fill Purchase Form &#8599;</a></div>`;
+    panel.innerHTML = `<div class="empty"><div class="big">No purchase orders yet</div>Use the Purchase Form to create a new order.<br><br><a class="btn" href="https://script.google.com/a/macros/satijapaper.com/s/AKfycbxQNUAtVUGNGBNQBH6sQy_67tmCyiruYf9-quHGxNQKKTkzs9ZeBIIQvV7DEOBCN6m9/exec" target="_blank" style="text-decoration:none;">Fill Purchase Form &#8599;</a></div>`;
     return;
   }
   if(vis.length === 0){
