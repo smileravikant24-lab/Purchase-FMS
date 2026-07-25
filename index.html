@@ -120,10 +120,8 @@
   <div class="sub" style="margin:-18px 0 14px;">Data source: <span class="mono">Purchase Form 26-27</span> &middot; <a href="https://docs.google.com/spreadsheets/d/1bzFrGTL-oaGrrjyXgI8WJuKOzgJG2-9jcD8r80QR73w/edit" target="_blank" style="color:var(--accent);">Sheet kholiye &#8599;</a></div>
 
   <div id="loginBanner" style="display:flex; align-items:center; gap:10px; margin-bottom:18px; flex-wrap:wrap; padding:12px 14px; border:1px solid var(--border); border-radius:10px; background:var(--surface);">
-    <span class="sub" style="margin:0; font-weight:600;">Aap kaun hain?</span>
-    <button class="btn small" id="btn-all" onclick="setCurrentUser('all')">Admin (sabhi dekhein)</button>
-    <button class="btn ghost small" id="btn-sandeep" onclick="setCurrentUser('satijapaper@gmail.com')">Sandeep ji</button>
-    <button class="btn ghost small" id="btn-pooja" onclick="setCurrentUser('poojasatijapaper@gmail.com')">Pooja ji</button>
+    <span class="sub" style="margin:0; font-weight:600;">Aap:</span>
+    <span class="badge ok" id="identityBadge">&hellip;</span>
   </div>
 
   <div class="stats" id="stats"></div>
@@ -163,13 +161,18 @@ const STEPS = [
   {key:'PO6', label:'Transporter + GR', hours:120, doerName:'Ms. Pooja', doerEmail:'poojasatijapaper@gmail.com', docs:['E-Way Bill','GR Copy']},
 ];
 const PURCHASE_FORM_URL = 'https://docs.google.com/spreadsheets/d/1bzFrGTL-oaGrrjyXgI8WJuKOzgJG2-9jcD8r80QR73w/edit';
+// System master: login email -> jo dikhna chahiye. Naya user add karna ho to yaha entry badhaiye.
+const USER_MASTER = {
+  'satijapaper@gmail.com': 'Sandeep ji',
+  'poojasatijapaper@gmail.com': 'Pooja ji'
+};
 let currentUser = 'all';
 let pendingDocs = {};
 
 // ===== BACKEND CONFIG =====
 // Apps Script deploy karne ke baad, yaha uska Web App URL paste kariye.
 // Khaali chhoड़ने par, dashboard Claude ke andar test-mode (window.storage) mein chalega.
-const APPS_SCRIPT_URL = '';
+const APPS_SCRIPT_URL = 'https://script.google.com/a/macros/satijapaper.com/s/AKfycbxQNUAtVUGNGBNQBH6sQy_67tmCyiruYf9-quHGxNQKKTkzs9ZeBIIQvV7DEOBCN6m9/exec';
 
 async function apiCall(payload){
   const res = await fetch(APPS_SCRIPT_URL, {
@@ -230,11 +233,8 @@ function buildStepsForOrder(o){
 }
 
 async function loadOrders(){
-  try{
-    const cu = await window.storage.get('currentUser', false);
-    if(cu && cu.value) currentUser = cu.value;
-  }catch(e){}
-  updateLoginButtons();
+  currentUser = await detectCurrentUser();
+  renderIdentityBadge();
   try{
     const existing = await backendGetOrders();
     if(!existing || existing.length === 0){
@@ -260,7 +260,6 @@ async function seedFromPurchaseForm(){
 }
 
 async function resyncSeed(){
-  if(!confirm('Ye saari existing tracking (step status, invoice qty) reset karke Purchase Form 26-27 se dubara load karega. Continue?')) return;
   if(!APPS_SCRIPT_URL){
     const list = await window.storage.list('po:', false);
     if(list && list.keys){
@@ -302,19 +301,22 @@ function orderHasMismatch(o){
   return o.items.some(i => i.invoiceQty !== null && i.invoiceQty !== undefined && i.invoiceQty !== i.orderQty);
 }
 
-async function setCurrentUser(v){
-  currentUser = v;
-  try{ await window.storage.set('currentUser', v, false); }catch(e){}
-  updateLoginButtons();
-  render();
+// Manual user-switch button hata diya hai — login jis mail se hua hai, usी se filter hota hai.
+async function detectCurrentUser(){
+  if(APPS_SCRIPT_URL){
+    try{
+      const data = await apiCall({action:'whoami'});
+      const email = ((data && data.email) || '').toLowerCase().trim();
+      if(USER_MASTER[email]) return email;
+    }catch(e){}
+  }
+  return 'all';
 }
 
-function updateLoginButtons(){
-  ['all','satijapaper@gmail.com','poojasatijapaper@gmail.com'].forEach(v => {
-    const id = v === 'all' ? 'btn-all' : (v === 'satijapaper@gmail.com' ? 'btn-sandeep' : 'btn-pooja');
-    const el = document.getElementById(id);
-    if(el) el.className = (v === currentUser) ? 'btn small' : 'btn ghost small';
-  });
+function renderIdentityBadge(){
+  const el = document.getElementById('identityBadge');
+  if(!el) return;
+  el.textContent = USER_MASTER[currentUser] || 'Admin (sabhi dekhein)';
 }
 
 function visibleOrders(){
@@ -533,13 +535,13 @@ async function viewDoc(orderId, stepKey, docLabel){
   try{
     const key = `doc:${orderId}:${stepKey}:${docLabel}`;
     const r = await window.storage.get(key, false);
-    if(!r){ alert('Document nahi mila'); return; }
+    if(!r) return;
     const res = await fetch(r.value);
     const blob = await res.blob();
     const blobUrl = URL.createObjectURL(blob);
     window.open(blobUrl, '_blank');
   }catch(e){
-    alert('Document load nahi ho paya');
+    console.error('Document load nahi ho paya', e);
   }
 }
 
@@ -551,7 +553,6 @@ function toggleExpand(id){
 async function completeStep(orderId, stepKey){
   const o = orders.find(x => x.id === orderId);
   if(!o) return;
-  const stepDef = STEPS.find(s => s.key === stepKey);
 
   if(stepKey === 'PO3'){
     o.items.forEach(it => {
@@ -561,11 +562,6 @@ async function completeStep(orderId, stepKey){
   }
 
   const uploaded = (pendingDocs[orderId] && pendingDocs[orderId][stepKey]) || {};
-  let missing = [];
-  stepDef.docs.forEach(d => { if(!uploaded[d]) missing.push(d); });
-  if(missing.length){
-    if(!confirm(`${missing.join(', ')} upload nahi hui. Bina doc ke bhi step complete karein?`)) return;
-  }
 
   const docsFlag = {};
   for(const d of Object.keys(uploaded)){
@@ -613,7 +609,7 @@ function addItemRow(){
 async function submitOrder(){
   const mill = document.getElementById('f-mill').value.trim();
   const date = document.getElementById('f-date').value;
-  if(!mill){ alert('Mill name daaliye'); return; }
+  if(!mill) return;
   const rows = document.querySelectorAll('#itemRows .item-grid');
   const items = [];
   let itemId = 0;
@@ -626,7 +622,7 @@ async function submitOrder(){
       items.push({id:'i'+itemId, product:name, orderQty:qty, unit:'Kg', rate:rate, invoiceQty:null});
     }
   });
-  if(items.length === 0){ alert('Kam se kam ek item daaliye'); return; }
+  if(items.length === 0) return;
 
   const now = Date.now();
   let maxNum = 0;
