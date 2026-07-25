@@ -70,7 +70,7 @@
   table.items tr:last-child td{border-bottom:none;}
   .mismatch{color:var(--danger); font-weight:600;}
   .steps{display:flex; flex-wrap:wrap; gap:8px; margin-top:6px;}
-  .step-card{border:1px solid var(--border); border-radius:8px; padding:10px 12px; min-width:150px; flex:1;}
+  .step-card{border:1px solid var(--border); border-radius:8px; padding:10px 12px; min-width:150px; max-width:100%; flex:1 1 150px; box-sizing:border-box; overflow:hidden;}
   .step-card.done{border-color:var(--accent); background:var(--accent-soft);}
   .step-card.current{border-color:var(--warn);}
   .step-card .name{font-weight:600; font-size:12.5px;}
@@ -79,11 +79,11 @@
 
   .inv-row{display:flex; align-items:center; gap:10px; padding:6px 0; font-size:13px;}
   .inv-row input{width:90px; padding:5px 7px; border:1px solid var(--border-strong); border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:12.5px;}
-  .doc-row{display:flex; align-items:center; gap:10px; padding:5px 0; font-size:12.5px;}
-  .doc-row span{width:110px; flex-shrink:0; color:var(--ink-muted);}
-  .doc-row input{flex:1; padding:6px 8px; border:1px solid var(--border-strong); border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:12px;}
+  .doc-row{display:flex; flex-direction:column; gap:4px; padding:6px 0; font-size:12.5px;}
+  .doc-row span{color:var(--ink-muted);}
+  .doc-row input[type="file"]{width:100%; max-width:100%; box-sizing:border-box; padding:6px 8px; border:1px solid var(--border-strong); border-radius:6px; font-size:11px; overflow:hidden;}
   .doc-chip{display:inline-flex; align-items:center; gap:4px; background:var(--accent-soft); color:var(--accent-ink); font-size:11px; font-weight:600; padding:3px 8px; border-radius:5px; margin:2px 4px 2px 0; text-decoration:none;}
-  .task-card{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 20px; margin-bottom:14px;}
+  .task-card{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 20px; margin-bottom:14px; box-sizing:border-box; overflow:hidden;}
   .task-card.overdue{border-color:var(--danger);}
   .task-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; flex-wrap:wrap; gap:8px;}
   .task-pid{font-family:'JetBrains Mono',monospace; font-weight:600; font-size:15px;}
@@ -273,6 +273,11 @@ function buildStepsForOrder(o){
   return steps;
 }
 
+function poNumber(id){
+  const m = String(id).match(/(\d+)\s*$/);
+  return m ? parseInt(m[1], 10) : 0;
+}
+
 async function loadOrders(){
   try{
     const cu = await window.storage.get('currentUser', false);
@@ -285,7 +290,7 @@ async function loadOrders(){
       await seedFromPurchaseForm();
       return;
     }
-    orders = existing.sort((a,b)=> b.createdAt - a.createdAt);
+    orders = existing.sort((a,b)=> poNumber(b.id) - poNumber(a.id));
   }catch(e){
     orders = [];
   }
@@ -299,7 +304,7 @@ async function seedFromPurchaseForm(){
     _legacySharedInvoiceQty: o._legacySharedInvoiceQty
   }));
   for(const o of seeded){ await saveOrder(o); }
-  orders = seeded.sort((a,b)=> b.createdAt - a.createdAt);
+  orders = seeded.sort((a,b)=> poNumber(b.id) - poNumber(a.id));
   render();
 }
 
