@@ -143,10 +143,8 @@
 
   <div id="adminControls" style="display:none; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap;">
     <input type="text" id="searchBox" placeholder="Search by PO number or mill..." oninput="setSearchQuery(this.value)" style="flex:1; min-width:200px; padding:9px 12px; border:1px solid var(--border-strong); border-radius:7px; font-family:inherit; font-size:13px;">
-    <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ink-muted); cursor:pointer;">
-      <input type="checkbox" id="showCompletedToggle" onchange="setShowCompleted(this.checked)">
-      Show completed orders
-    </label>
+    <button class="btn small" id="btn-tab-pending" onclick="setAdminTab('pending')">Pending</button>
+    <button class="btn ghost small" id="btn-tab-completed" onclick="setAdminTab('completed')">Completed</button>
   </div>
 
   <div class="stats" id="stats"></div>
@@ -422,10 +420,6 @@ function setSearchQuery(v){
   searchQuery = v;
   render();
 }
-function setShowCompleted(v){
-  showCompleted = v;
-  render();
-}
 
 function updateLoginButtons(){
   ['all','satijapaper@gmail.com','poojasatijapaper@gmail.com'].forEach(v => {
@@ -435,20 +429,26 @@ function updateLoginButtons(){
   });
 }
 
-let showCompleted = false;
+let adminTab = 'pending';
 let searchQuery = '';
 
 function visibleOrders(){
   let base = orders;
   if(searchQuery.trim()){
     const q = searchQuery.trim().toLowerCase();
-    base = base.filter(o => o.id.toLowerCase().includes(q) || o.mill.toLowerCase().includes(q));
-    return base;
+    return base.filter(o => o.id.toLowerCase().includes(q) || o.mill.toLowerCase().includes(q));
   }
+  const done = base.filter(o => currentStepIndex(o) >= STEPS.length);
   const notDone = base.filter(o => currentStepIndex(o) < STEPS.length);
-  const pool = (currentUser === 'all' && showCompleted) ? base : notDone;
-  if(currentUser === 'all') return pool;
+  if(currentUser === 'all') return adminTab === 'completed' ? done : notDone;
   return notDone.filter(o => STEPS[currentStepIndex(o)].doerEmail === currentUser);
+}
+
+function setAdminTab(tab){
+  adminTab = tab;
+  document.getElementById('btn-tab-pending').className = tab === 'pending' ? 'btn small' : 'btn ghost small';
+  document.getElementById('btn-tab-completed').className = tab === 'completed' ? 'btn small' : 'btn ghost small';
+  render();
 }
 
 function render(){
@@ -516,7 +516,10 @@ function renderPanel(){
     return;
   }
   if(vis.length === 0){
-    panel.innerHTML = `<div class="empty"><div class="big">No pending work</div>All orders are complete or belong to someone else.</div>`;
+    const msg = (currentUser === 'all' && adminTab === 'completed' && !searchQuery.trim())
+      ? 'No orders have been fully completed yet.'
+      : 'All orders are complete or belong to someone else.';
+    panel.innerHTML = `<div class="empty"><div class="big">Nothing here</div>${msg}</div>`;
     return;
   }
   if(currentUser !== 'all'){
