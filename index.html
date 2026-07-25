@@ -336,13 +336,23 @@ function renderIdentityBanner(){
   const el = document.getElementById('loginBanner');
   if(!el) return;
   if(!currentUser){
-    const picks = Object.keys(USER_MASTER).map(email =>
-      `<button class="btn small" onclick="bindIdentity('${email}')">${USER_MASTER[email]}</button>`
-    ).join('');
-    el.innerHTML = `<span class="sub" style="margin:0; font-weight:600;">Aap kaun hain? (ek baar chuniye, is device pe yaad rahega)</span>${picks}<button class="btn ghost small" onclick="bindIdentity('all')">Admin (sabhi dekhein)</button>`;
+    el.innerHTML = `
+      <span class="sub" style="margin:0; font-weight:600;">Login:</span>
+      <input type="email" id="loginEmail" placeholder="aapki email" style="padding:8px 10px; border:1px solid var(--border-strong); border-radius:7px; font-size:13.5px; font-family:inherit; flex:1; min-width:200px;">
+      <button class="btn small" onclick="loginWithEmail()">Login</button>
+    `;
+    const inp = document.getElementById('loginEmail');
+    if(inp) inp.addEventListener('keydown', e => { if(e.key === 'Enter') loginWithEmail(); });
   } else {
-    el.innerHTML = `<span class="sub" style="margin:0; font-weight:600;">Aap:</span><span class="badge ok">${USER_MASTER[currentUser] || 'Admin (sabhi dekhein)'}</span><button class="btn ghost small" style="margin-left:auto;" onclick="switchIdentity()">Badlein</button>`;
+    el.innerHTML = `<span class="sub" style="margin:0; font-weight:600;">Aap:</span><span class="badge ok">${USER_MASTER[currentUser] || 'Admin (sabhi dekhein)'}</span><button class="btn ghost small" style="margin-left:auto;" onclick="switchIdentity()">Logout</button>`;
   }
+}
+
+function loginWithEmail(){
+  const inp = document.getElementById('loginEmail');
+  const email = ((inp && inp.value) || '').toLowerCase().trim();
+  if(!email) return;
+  bindIdentity(USER_MASTER[email] ? email : 'all');
 }
 
 function visibleOrders(){
