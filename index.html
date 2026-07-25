@@ -119,6 +119,7 @@
     <div style="display:flex; gap:8px; align-items:center;">
       <button class="btn ghost small" onclick="resyncSeed()" title="Reload new POs from the Purchase Form">&#8635; Resync from Purchase Form</button>
       <button class="btn ghost small" onclick="dedupeOrders()" title="Remove duplicate PO rows, keeping the most complete version">Clean up duplicates</button>
+      <button class="btn ghost small" onclick="backfillFields()" title="Fill in missing GSTIN, vehicle, invoice, and doc-link details from Purchase Form + old FMS">Backfill full details</button>
       <a class="btn ghost" href="https://script.google.com/a/macros/satijapaper.com/s/AKfycbxQNUAtVUGNGBNQBH6sQy_67tmCyiruYf9-quHGxNQKKTkzs9ZeBIIQvV7DEOBCN6m9/exec" target="_blank" style="text-decoration:none; display:inline-block;">Fill Purchase Form &#8599;</a>
     </div>
   </header>
@@ -138,6 +139,14 @@
       </span>
       <button class="btn ghost small" onclick="signOutUser()">Sign out</button>
     </div>
+  </div>
+
+  <div id="adminControls" style="display:none; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap;">
+    <input type="text" id="searchBox" placeholder="Search by PO number or mill..." oninput="setSearchQuery(this.value)" style="flex:1; min-width:200px; padding:9px 12px; border:1px solid var(--border-strong); border-radius:7px; font-family:inherit; font-size:13px;">
+    <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ink-muted); cursor:pointer;">
+      <input type="checkbox" id="showCompletedToggle" onchange="setShowCompleted(this.checked)">
+      Show completed orders
+    </label>
   </div>
 
   <div class="stats" id="stats"></div>
@@ -328,6 +337,17 @@ async function resyncSeed(){
   await seedFromPurchaseForm();
 }
 
+async function backfillFields(){
+  if(!APPS_SCRIPT_URL){
+    alert('This only works once the Apps Script backend is connected.');
+    return;
+  }
+  if(!confirm('This will fill in missing GSTIN, vehicle, invoice, and doc-link details from Purchase Form + old FMS, without changing any existing data. Continue?')) return;
+  const result = await apiCall({action:'backfill'});
+  alert(`Backfill complete. ${result.updated || 0} orders checked and updated.`);
+  await loadOrders();
+}
+
 async function dedupeOrders(){
   if(!APPS_SCRIPT_URL){
     alert('This only works once the Apps Script backend is connected.');
@@ -393,6 +413,17 @@ async function setCurrentUser(v){
   currentUser = v;
   try{ await window.storage.set('currentUser', v, false); }catch(e){}
   updateLoginButtons();
+  const ac = document.getElementById('adminControls');
+  if(ac) ac.style.display = (v === 'all') ? 'flex' : 'none';
+  render();
+}
+
+function setSearchQuery(v){
+  searchQuery = v;
+  render();
+}
+function setShowCompleted(v){
+  showCompleted = v;
   render();
 }
 
@@ -404,9 +435,19 @@ function updateLoginButtons(){
   });
 }
 
+let showCompleted = false;
+let searchQuery = '';
+
 function visibleOrders(){
-  const notDone = orders.filter(o => currentStepIndex(o) < STEPS.length);
-  if(currentUser === 'all') return notDone;
+  let base = orders;
+  if(searchQuery.trim()){
+    const q = searchQuery.trim().toLowerCase();
+    base = base.filter(o => o.id.toLowerCase().includes(q) || o.mill.toLowerCase().includes(q));
+    return base;
+  }
+  const notDone = base.filter(o => currentStepIndex(o) < STEPS.length);
+  const pool = (currentUser === 'all' && showCompleted) ? base : notDone;
+  if(currentUser === 'all') return pool;
   return notDone.filter(o => STEPS[currentStepIndex(o)].doerEmail === currentUser);
 }
 
