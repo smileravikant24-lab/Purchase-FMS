@@ -81,7 +81,11 @@
   .inv-row input{width:90px; padding:5px 7px; border:1px solid var(--border-strong); border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:12.5px;}
   .doc-row{display:flex; flex-direction:column; gap:4px; padding:6px 0; font-size:12.5px;}
   .doc-row span{color:var(--ink-muted);}
-  .doc-row input[type="file"]{width:100%; max-width:100%; box-sizing:border-box; padding:6px 8px; border:1px solid var(--border-strong); border-radius:6px; font-size:11px; overflow:hidden;}
+  .doc-row input{width:100%; max-width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid var(--border-strong); border-radius:6px; font-size:12.5px; font-family:inherit;}
+  .doc-row input[type="file"]{font-size:11px; overflow:hidden;}
+  .delay-text{font-size:11px; font-weight:600; margin-top:3px;}
+  .delay-text.ok{color:var(--accent-ink);}
+  .delay-text.late{color:var(--danger);}
   .doc-chip{display:inline-flex; align-items:center; gap:4px; background:var(--accent-soft); color:var(--accent-ink); font-size:11px; font-weight:600; padding:3px 8px; border-radius:5px; margin:2px 4px 2px 0; text-decoration:none;}
   .task-card{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 20px; margin-bottom:14px; box-sizing:border-box; overflow:hidden;}
   .task-card.overdue{border-color:var(--danger);}
@@ -351,6 +355,24 @@ function fmtDate(ts){
   const d = new Date(ts);
   return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) + ' ' + d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
 }
+function fmtDuration(ms){
+  const mins = Math.round(Math.abs(ms) / 60000);
+  const h = Math.floor(mins / 60), m = mins % 60;
+  if(h === 0) return m + 'm';
+  return h + 'h ' + m + 'm';
+}
+function delayText(st){
+  if(st.status === 'done' && st.actual && st.planned){
+    const diff = st.actual - st.planned;
+    return diff <= 0
+      ? `<span class="delay-text ok">On time</span>`
+      : `<span class="delay-text late">Delayed by ${fmtDuration(diff)}</span>`;
+  }
+  if(st.status !== 'done' && st.planned && Date.now() > st.planned){
+    return `<span class="delay-text late">Overdue by ${fmtDuration(Date.now() - st.planned)}</span>`;
+  }
+  return '';
+}
 function orderValue(o){
   return o.items.reduce((s,i)=> s + i.orderQty * i.rate, 0);
 }
@@ -430,17 +452,15 @@ function renderTaskCard(o){
       ['vehicleNumber','Vehicle number'], ['driverNumber','Driver number'], ['transporterName','Transporter name'],
       ['invoiceNumber','Invoice number'], ['invoiceDate','Invoice date'], ['invoiceAmount','Invoice amount'],
       ['transferStatus','Transfer status']
-    ].map(([field,label]) => `<div class="inv-row"><span style="flex:1;">${label}</span><input type="text" id="fld-${o.id}-${s.key}-${field}" placeholder="${label}"></div>`).join('') : '';
-  const po4Fields = s.key === 'PO4' ? [
-      ['leadTime','Lead time'], ['driverStatus','Driver status']
-    ].map(([field,label]) => `<div class="inv-row"><span style="flex:1;">${label}</span><input type="text" id="fld-${o.id}-${s.key}-${field}" placeholder="${label}"></div>`).join('') : '';
+    ].map(([field,label]) => `<div class="doc-row"><span>${label}</span><input type="text" id="fld-${o.id}-${s.key}-${field}"></div>`).join('') : '';
+  const po4Fields = s.key === 'PO4' ? `<div class="doc-row"><span>Driver status</span><input type="text" id="fld-${o.id}-PO4-driverStatus"></div>` : '';
 
   return `<div class="task-card ${overdue?'overdue':''}">
     <div class="task-head">
       <span class="task-pid">${o.id}</span>
       <span class="badge ${overdue?'danger':'warn'}">${s.key} \u00b7 ${s.label}${overdue?' \u00b7 overdue':''}</span>
     </div>
-    <div class="task-sub">${o.mill} &middot; Planned: ${fmtDate(st.planned)}</div>
+    <div class="task-sub">${o.mill} &middot; Planned: ${fmtDate(st.planned)} ${delayText(st)}</div>
     <div class="task-items">${itemsLine}</div>
     ${invInputs}${po3Fields}${po4Fields}${docInputs}
     <button class="btn small" style="margin-top:8px;" onclick="completeStep('${o.id}','${s.key}')">Mark done</button>
@@ -556,9 +576,9 @@ function renderDetail(o){
     if(st.status === 'done') cls += ' done';
     else if(i === idx) cls += ' current';
     const plannedLine = `<div class="time">Planned: ${fmtDate(st.planned)}</div>`;
-    const doneLine = st.status === 'done'
+    const doneLine = (st.status === 'done'
       ? `<div class="time">Done: ${fmtDate(st.actual)}</div>`
-      : `<div class="time ${overdue?'late':''}">Done: &mdash;${overdue?' (overdue)':''}</div>`;
+      : `<div class="time ${overdue?'late':''}">Done: &mdash;${overdue?' (overdue)':''}</div>`) + delayText(st);
     let extraFieldsHtml = '';
     if(s.key === 'PO3'){
       const rows = [['Vehicle', st.vehicleNumber], ['Driver', st.driverNumber], ['Transporter', st.transporterName],
@@ -588,10 +608,8 @@ function renderDetail(o){
           ['vehicleNumber','Vehicle number'], ['driverNumber','Driver number'], ['transporterName','Transporter name'],
           ['invoiceNumber','Invoice number'], ['invoiceDate','Invoice date'], ['invoiceAmount','Invoice amount'],
           ['transferStatus','Transfer status']
-        ].map(([field,label]) => `<div class="inv-row"><span style="flex:1;">${label}</span><input type="text" id="fld-${o.id}-${s.key}-${field}" placeholder="${label}"></div>`).join('') : '';
-      const po4Fields = s.key === 'PO4' ? [
-          ['leadTime','Lead time'], ['driverStatus','Driver status']
-        ].map(([field,label]) => `<div class="inv-row"><span style="flex:1;">${label}</span><input type="text" id="fld-${o.id}-${s.key}-${field}" placeholder="${label}"></div>`).join('') : '';
+        ].map(([field,label]) => `<div class="doc-row"><span>${label}</span><input type="text" id="fld-${o.id}-${s.key}-${field}"></div>`).join('') : '';
+      const po4Fields = s.key === 'PO4' ? `<div class="doc-row"><span>Driver status</span><input type="text" id="fld-${o.id}-PO4-driverStatus"></div>` : '';
       actionHtml = `<div style="margin-top:8px;">${invInputs}${po3Fields}${po4Fields}${docInputs}
           <button class="btn small" style="margin-top:6px;" onclick="completeStep('${o.id}','${s.key}')">Mark done</button>
         </div>`;
@@ -671,10 +689,12 @@ async function completeStep(orderId, stepKey){
     });
   }
   if(stepKey === 'PO4'){
-    ['leadTime','driverStatus'].forEach(field => {
-      const el = document.getElementById(`fld-${orderId}-PO4-${field}`);
-      if(el && el.value !== '') o.steps.PO4[field] = el.value;
-    });
+    const el = document.getElementById(`fld-${orderId}-PO4-driverStatus`);
+    if(el && el.value !== '') o.steps.PO4.driverStatus = el.value;
+    if(o.steps.PO3 && o.steps.PO3.actual){
+      const days = Math.round((Date.now() - o.steps.PO3.actual) / (24*3600*1000) * 10) / 10;
+      o.steps.PO4.leadTime = days + ' day' + (days === 1 ? '' : 's');
+    }
   }
 
   const uploaded = (pendingDocs[orderId] && pendingDocs[orderId][stepKey]) || {};
