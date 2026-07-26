@@ -122,6 +122,7 @@
       <button class="btn ghost small" onclick="resyncSeed()" title="Reload new POs from the Purchase Form">&#8635; Resync from Purchase Form</button>
       <button class="btn ghost small" onclick="dedupeOrders()" title="Remove duplicate PO rows, keeping the most complete version">Clean up duplicates</button>
       <button class="btn ghost small" onclick="backfillFields()" title="Fill in missing GSTIN, vehicle, invoice, and doc-link details from Purchase Form + old FMS">Backfill full details</button>
+      <button class="btn ghost small" onclick="loadFullHistory()" title="Push all historical orders into the Sheet, in case older ones are missing">Load full history</button>
       <a class="btn ghost" href="https://script.google.com/a/macros/satijapaper.com/s/AKfycbxQNUAtVUGNGBNQBH6sQy_67tmCyiruYf9-quHGxNQKKTkzs9ZeBIIQvV7DEOBCN6m9/exec" target="_blank" style="text-decoration:none; display:inline-block;">Fill Purchase Form &#8599;</a>
     </div>
   </header>
@@ -335,6 +336,25 @@ async function resyncSeed(){
     for(const k of list.keys){ try{ await window.storage.delete(k, false); }catch(e){} }
   }
   await seedFromPurchaseForm();
+}
+
+async function loadFullHistory(){
+  if(!confirm('This will add any historical orders that are missing from the Sheet (like old PO0001-0049). Orders already in the Sheet will NOT be touched or overwritten. Continue?')) return;
+  const existing = await backendGetOrders();
+  const existingIds = new Set((existing || []).map(o => String(o.id).trim()));
+  let added = 0;
+  for(const o of SEED_DATA){
+    if(existingIds.has(String(o.id).trim())) continue;
+    const order = {
+      id: o.id, mill: o.mill, poDate: o.poDate, items: o.items,
+      createdAt: o.createdAt, steps: o.steps || buildStepsForOrder(o),
+      _legacySharedInvoiceQty: o._legacySharedInvoiceQty
+    };
+    await saveOrder(order);
+    added++;
+  }
+  alert(`${added} missing historical orders added. Existing orders were left untouched.`);
+  await loadOrders();
 }
 
 async function backfillFields(){
