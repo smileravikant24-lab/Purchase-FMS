@@ -116,7 +116,10 @@
   <header>
     <div style="display:flex; align-items:center; gap:12px;">
       <img src="logo.png" alt="Satija Paper logo" style="height:48px; width:48px; object-fit:contain;">
-      <h1>Purchase order tracker</h1>
+      <div>
+        <h1>Purchase order tracker</h1>
+        <div class="sub" style="margin-top:2px;">Build: 2026-07-26-v2</div>
+      </div>
     </div>
     <div style="display:flex; gap:8px; align-items:center;">
       <button class="btn ghost small" onclick="resyncSeed()" title="Reload new POs from the Purchase Form">&#8635; Resync from Purchase Form</button>
@@ -475,8 +478,9 @@ function renderStats(){
   const open = vis.length;
   const overdue = vis.filter(o => isStepOverdue(o, currentStepIndex(o))).length;
   const mismatches = vis.filter(orderHasMismatch).length;
+  const openLabel = (currentUser === 'all' && adminTab === 'completed') ? 'Completed orders' : 'Pending orders';
   document.getElementById('stats').innerHTML = `
-    <div class="stat"><div class="num">${open}</div><div class="lbl">Pending orders</div></div>
+    <div class="stat"><div class="num">${open}</div><div class="lbl">${openLabel}</div></div>
     <div class="stat ${overdue>0?'danger':''}"><div class="num">${overdue}</div><div class="lbl">Overdue right now</div></div>
     <div class="stat ${mismatches>0?'warn':''}"><div class="num">${mismatches}</div><div class="lbl">Qty mismatches</div></div>
   `;
