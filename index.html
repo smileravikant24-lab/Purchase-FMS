@@ -327,19 +327,13 @@ async function resyncSeed(){
     const fmsNote = result.oldFmsAvailable === false ? ' (old FMS not reachable, skipped)' : '';
 
     // Also make sure no historical orders (like old PO0001-0049) are missing -
-    // this only adds orders that don't already exist, never touches existing ones.
-    const existing = await backendGetOrders();
-    const existingIds = new Set((existing || []).map(o => String(o.id).trim()));
+    // done as one batch call on the backend, only ever adds, never overwrites.
     let historyAdded = 0;
-    for(const o of SEED_DATA){
-      if(existingIds.has(String(o.id).trim())) continue;
-      const order = {
-        id: o.id, mill: o.mill, poDate: o.poDate, items: o.items,
-        createdAt: o.createdAt, steps: o.steps || buildStepsForOrder(o),
-        _legacySharedInvoiceQty: o._legacySharedInvoiceQty
-      };
-      await saveOrder(order);
-      historyAdded++;
+    try{
+      const historyResult = await apiCall({action:'seedHistory', historyOrders: SEED_DATA});
+      historyAdded = historyResult.added || 0;
+    }catch(e){
+      console.error('seedHistory failed', e);
     }
 
     alert(`${result.added || 0} new orders found. ${result.statusUpdated || 0} orders updated from old FMS. ${historyAdded} missing historical orders added${fmsNote}.`);
