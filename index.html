@@ -479,11 +479,12 @@ function renderStats(){
   const overdue = vis.filter(o => isStepOverdue(o, currentStepIndex(o))).length;
   const mismatches = vis.filter(orderHasMismatch).length;
   const openLabel = (currentUser === 'all' && adminTab === 'completed') ? 'Completed orders' : 'Pending orders';
+  const debugLine = `<div style="font-size:11px; color:var(--ink-faint); margin-top:6px;">Debug: currentUser=${currentUser}, adminTab=${adminTab}, total orders=${orders.length}, done in memory=${orders.filter(o=>currentStepIndex(o)>=STEPS.length).length}</div>`;
   document.getElementById('stats').innerHTML = `
     <div class="stat"><div class="num">${open}</div><div class="lbl">${openLabel}</div></div>
     <div class="stat ${overdue>0?'danger':''}"><div class="num">${overdue}</div><div class="lbl">Overdue right now</div></div>
     <div class="stat ${mismatches>0?'warn':''}"><div class="num">${mismatches}</div><div class="lbl">Qty mismatches</div></div>
-  `;
+  ` + debugLine;
 }
 
 function renderTaskCard(o){
