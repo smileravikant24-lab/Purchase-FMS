@@ -462,8 +462,12 @@ function visibleOrders(){
 
 function setAdminTab(tab){
   adminTab = tab;
-  document.getElementById('btn-tab-pending').className = tab === 'pending' ? 'btn small' : 'btn ghost small';
-  document.getElementById('btn-tab-completed').className = tab === 'completed' ? 'btn small' : 'btn ghost small';
+  try{
+    document.getElementById('btn-tab-pending').className = tab === 'pending' ? 'btn small' : 'btn ghost small';
+    document.getElementById('btn-tab-completed').className = tab === 'completed' ? 'btn small' : 'btn ghost small';
+  }catch(e){
+    console.error('button style update failed', e);
+  }
   render();
 }
 
