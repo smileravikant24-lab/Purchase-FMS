@@ -157,6 +157,20 @@ const STEPS = [
   {key:'PO5', label:'Warehouse delivery', hours:96, doerName:'Ms. Pooja', doerEmail:'poojasatijapaper@gmail.com', docs:['Godown Slip','GR Signed Copy']},
   {key:'PO6', label:'Transporter + GR', hours:120, doerName:'Ms. Pooja', doerEmail:'poojasatijapaper@gmail.com', docs:['E-Way Bill','GR Copy']},
 ];
+// Purane FMS mein ye columns alag-alag jagah collect hote the, ab sab PO3
+// (Dispatch + invoice, jaha invoice qty confirm hoti hai) mein ek saath hain.
+const INVOICE_FIELDS = [
+  {key:'vehicleNo', label:'Vehicle Number', type:'text'},
+  {key:'driverNo', label:'Driver Number', type:'text'},
+  {key:'invoiceNo', label:'Invoice Number', type:'text'},
+  {key:'invoiceDate', label:'Invoice Date', type:'date'},
+  {key:'creditDays', label:'Credit Days', type:'number'},
+  {key:'amount', label:'Amount', type:'number'},
+  {key:'leadTimeDays', label:'Lead Time (Days)', type:'number'},
+  {key:'driverStatus', label:'Driver Status', type:'text'},
+  {key:'transferToOtherParty', label:'Transfer to Other Party?', type:'select', options:['No','Yes']},
+  {key:'transporterName', label:'Transporter Name', type:'text'}
+];
 const PURCHASE_FORM_URL = 'https://docs.google.com/spreadsheets/d/1bzFrGTL-oaGrrjyXgI8WJuKOzgJG2-9jcD8r80QR73w/edit';
 // System master: login email -> jo dikhna chahiye. Naya user add karna ho to yaha entry badhaiye.
 const USER_MASTER = {
@@ -401,6 +415,27 @@ function renderStats(){
   `;
 }
 
+function invoiceFieldInputs(o){
+  const existing = (o.steps.PO3 && o.steps.PO3.invoiceDetails) || {};
+  const fields = INVOICE_FIELDS.map(f => {
+    const val = existing[f.key] != null ? existing[f.key] : '';
+    const id = `invf-${o.id}-${f.key}`;
+    const control = f.type === 'select'
+      ? `<select id="${id}" style="width:100%; padding:7px 8px; border:1px solid var(--border-strong); border-radius:6px; font-size:12.5px; font-family:inherit;">${f.options.map(op => `<option value="${op}" ${val===op?'selected':''}>${op}</option>`).join('')}</select>`
+      : `<input type="${f.type}" id="${id}" value="${val}" style="width:100%; padding:7px 8px; border:1px solid var(--border-strong); border-radius:6px; font-size:12.5px; font-family:'JetBrains Mono',monospace;">`;
+    return `<div><label style="display:block; font-size:11px; color:var(--ink-muted); margin-bottom:3px;">${f.label}</label>${control}</div>`;
+  }).join('');
+  return `<div class="inv-fields" style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px;">${fields}</div>`;
+}
+
+function invoiceFieldsSummary(o){
+  const d = (o.steps.PO3 && o.steps.PO3.invoiceDetails) || {};
+  const rows = INVOICE_FIELDS.filter(f => d[f.key] !== undefined && d[f.key] !== '').map(f =>
+    `<div class="doc-row"><span>${f.label}</span><span class="mono">${d[f.key]}</span></div>`
+  ).join('');
+  return rows ? `<div style="margin-top:6px;">${rows}</div>` : '';
+}
+
 function renderTaskCard(o){
   const idx = currentStepIndex(o);
   const s = STEPS[idx];
@@ -421,6 +456,7 @@ function renderTaskCard(o){
         <span style="flex:1;">${it.product}</span>
         <input type="number" id="inv-${o.id}-${it.id}" value="${it.orderQty}" step="0.01">
       </div>`).join('') : '';
+  const invFields = s.key === 'PO3' ? invoiceFieldInputs(o) : '';
 
   return `<div class="task-card ${overdue?'overdue':''}">
     <div class="task-head">
@@ -429,7 +465,7 @@ function renderTaskCard(o){
     </div>
     <div class="task-sub">${o.mill} &middot; Planned: ${fmtDate(st.planned)}</div>
     <div class="task-items">${itemsLine}</div>
-    ${invInputs}${docInputs}
+    ${invInputs}${invFields}${docInputs}
     <button class="btn small" style="margin-top:8px;" onclick="completeStep('${o.id}','${s.key}')">Mark done</button>
   </div>`;
 }
@@ -546,15 +582,17 @@ function renderDetail(o){
             <span style="flex:1;">${it.product}</span>
             <input type="number" id="inv-${o.id}-${it.id}" value="${it.orderQty}" step="0.01">
           </div>`).join('') : '';
-      actionHtml = `<div style="margin-top:8px;">${invInputs}${docInputs}
+      const invFields = s.key === 'PO3' ? invoiceFieldInputs(o) : '';
+      actionHtml = `<div style="margin-top:8px;">${invInputs}${invFields}${docInputs}
           <button class="btn small" style="margin-top:6px;" onclick="completeStep('${o.id}','${s.key}')">Mark done</button>
         </div>`;
-    } else if(st.status === 'done' && s.docs.length){
+    } else if(st.status === 'done' && (s.docs.length || s.key === 'PO3')){
       const chips = s.docs.map(d => {
         const has = st.docs && st.docs[d];
         return has ? `<a href="#" onclick="viewDoc('${o.id}','${s.key}','${d}');return false;" class="doc-chip">${d} &#8599;</a>` : `<span class="doc-chip" style="opacity:.5;">${d} missing</span>`;
       }).join('');
-      actionHtml = `<div style="margin-top:6px;">${chips}</div>`;
+      const invSummary = s.key === 'PO3' ? invoiceFieldsSummary(o) : '';
+      actionHtml = `<div style="margin-top:6px;">${chips}</div>${invSummary}`;
     }
     stepsHtml += `<div class="${cls}"><div class="name">${s.key} \u00b7 ${s.label}</div><div class="ts" style="font-size:11px; color:var(--ink-faint); margin-top:2px;">${s.doerName}</div>${plannedLine}${doneLine}${actionHtml}</div>`;
   });
@@ -618,6 +656,12 @@ async function completeStep(orderId, stepKey){
       const el = document.getElementById(`inv-${orderId}-${it.id}`);
       if(el && el.value !== '') it.invoiceQty = parseFloat(el.value);
     });
+    const details = {};
+    INVOICE_FIELDS.forEach(f => {
+      const el = document.getElementById(`invf-${orderId}-${f.key}`);
+      if(el && el.value !== '') details[f.key] = f.type === 'number' ? parseFloat(el.value) : el.value;
+    });
+    if(Object.keys(details).length) o.steps.PO3.invoiceDetails = details;
   }
 
   const uploaded = (pendingDocs[orderId] && pendingDocs[orderId][stepKey]) || {};
