@@ -515,7 +515,10 @@ function renderTaskCard(o){
       ['vehicleNumber','Vehicle number'], ['driverNumber','Driver number'], ['transporterName','Transporter name'],
       ['invoiceNumber','Invoice number'], ['invoiceDate','Invoice date'], ['invoiceCreditDays','Credit days (invoice)'],
       ['invoiceAmount','Invoice amount'], ['transferStatus','Transfer status'], ['insurance','Insurance'], ['freight','Freight']
-    ].map(([field,label]) => `<div class="doc-row"><span>${label}</span><input type="text" id="fld-${o.id}-${s.key}-${field}"></div>`).join('') : '';
+    ].map(([field,label]) => {
+      const prefill = (field === 'insurance' || field === 'freight') ? (o[field] || '') : '';
+      return `<div class="doc-row"><span>${label}</span><input type="text" id="fld-${o.id}-${s.key}-${field}" value="${prefill}"></div>`;
+    }).join('') : '';
   const po4Fields = s.key === 'PO4' ? `<div class="doc-row"><span>Driver status</span><input type="text" id="fld-${o.id}-PO4-driverStatus"></div>` : '';
 
   return `<div class="task-card ${overdue?'overdue':''}">
@@ -676,7 +679,10 @@ function renderDetail(o){
           ['vehicleNumber','Vehicle number'], ['driverNumber','Driver number'], ['transporterName','Transporter name'],
           ['invoiceNumber','Invoice number'], ['invoiceDate','Invoice date'], ['invoiceCreditDays','Credit days (invoice)'],
           ['invoiceAmount','Invoice amount'], ['transferStatus','Transfer status'], ['insurance','Insurance'], ['freight','Freight']
-        ].map(([field,label]) => `<div class="doc-row"><span>${label}</span><input type="text" id="fld-${o.id}-${s.key}-${field}"></div>`).join('') : '';
+        ].map(([field,label]) => {
+          const prefill = (field === 'insurance' || field === 'freight') ? (o[field] || '') : '';
+          return `<div class="doc-row"><span>${label}</span><input type="text" id="fld-${o.id}-${s.key}-${field}" value="${prefill}"></div>`;
+        }).join('') : '';
       const po4Fields = s.key === 'PO4' ? `<div class="doc-row"><span>Driver status</span><input type="text" id="fld-${o.id}-PO4-driverStatus"></div>` : '';
       actionHtml = `<div style="margin-top:8px;">${invInputs}${po3Fields}${po4Fields}${docInputs}
           <button class="btn small" style="margin-top:6px;" onclick="completeStep('${o.id}','${s.key}')">Mark done</button>
