@@ -78,8 +78,8 @@
   .step-card .time{font-size:11px; color:var(--ink-muted); margin-top:3px;}
   .step-card .time.late{color:var(--danger);}
 
-  .inv-row{display:flex; align-items:center; gap:10px; padding:6px 0; font-size:13px;}
-  .inv-row input{width:90px; padding:5px 7px; border:1px solid var(--border-strong); border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:12.5px;}
+  .inv-row{display:flex; align-items:flex-start; gap:10px; padding:6px 0; font-size:13px;}
+  .inv-row input{width:90px; margin-top:1px; padding:5px 7px; border:1px solid var(--border-strong); border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:12.5px;}
   .doc-row{display:flex; flex-direction:column; gap:4px; padding:6px 0; font-size:12.5px;}
   .doc-row span{color:var(--ink-muted);}
   .doc-row input{width:100%; max-width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid var(--border-strong); border-radius:6px; font-size:12.5px; font-family:inherit;}
@@ -506,7 +506,7 @@ function renderStats(){
 function po3ConfirmSection(o){
   const invRows = o.items.map(it => `
       <div class="inv-row">
-        <span style="flex:1;">${it.product}</span>
+        <span style="flex:1;">${it.product}<span class="field-hint">Order qty tha: ${it.orderQty} ${it.unit}</span></span>
         <input type="number" id="inv-${o.id}-${it.id}" value="${it.orderQty}" step="0.01">
       </div>`).join('');
 
@@ -664,6 +664,7 @@ function renderDetail(o){
   itemsHtml += `</table>`;
 
   let stepsHtml = `<div class="steps">`;
+  let currentPanelHtml = '';
   STEPS.forEach((s,i) => {
     const st = o.steps[s.key];
     const overdue = st.status !== 'done' && Date.now() > st.planned;
@@ -693,6 +694,7 @@ function renderDetail(o){
     }
     let actionHtml = '';
     if(i === idx && st.status !== 'done'){
+      actionHtml = `<div class="ts" style="margin-top:6px; color:var(--warn); font-weight:600;">Confirm details below &#8595;</div>`;
       const docInputs = s.docs.map(d => {
         const safe = d.replace(/\s+/g,'_');
         return `<div class="doc-row">
@@ -703,8 +705,10 @@ function renderDetail(o){
       }).join('');
       const po3Section = s.key === 'PO3' ? po3ConfirmSection(o) : '';
       const po4Fields = s.key === 'PO4' ? `<div class="doc-row"><span>Driver status</span><input type="text" id="fld-${o.id}-PO4-driverStatus"></div>` : '';
-      actionHtml = `<div style="margin-top:8px;">${po3Section}${po4Fields}${docInputs}
-          <button class="btn small" style="margin-top:6px;" onclick="completeStep('${o.id}','${s.key}')">Mark done</button>
+      currentPanelHtml = `<div style="margin-top:14px; padding:14px 16px; border:1px solid var(--border); border-radius:10px; background:var(--surface);">
+          <h4 style="margin:0 0 4px;">${s.key} &middot; ${s.label} &mdash; confirm karein</h4>
+          ${po3Section}${po4Fields}${docInputs}
+          <button class="btn small" style="margin-top:10px;" onclick="completeStep('${o.id}','${s.key}')">Mark done</button>
         </div>`;
     } else if(st.status === 'done' && s.docs.length){
       const chips = s.docs.map(d => {
@@ -717,7 +721,7 @@ function renderDetail(o){
   });
   stepsHtml += `</div>`;
 
-  return `${legacyNote}${orderInfoHtml}<h4>Items</h4>${itemsHtml}<h4>Steps</h4>${stepsHtml}`;
+  return `${legacyNote}${orderInfoHtml}<h4>Items</h4>${itemsHtml}<h4>Steps</h4>${stepsHtml}${currentPanelHtml}`;
 }
 
 function handleFileSelect(evt, orderId, stepKey, docLabel){
