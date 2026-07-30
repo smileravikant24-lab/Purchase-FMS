@@ -129,7 +129,8 @@
       </div>
     </div>
     <div style="display:flex; gap:8px; align-items:center;">
-      <button class="btn ghost small" onclick="resyncSeed()" title="Reload new POs from the Purchase Form">&#8635; Resync from Purchase Form</button>
+      <span class="ts" id="syncStatus" style="color:var(--ink-faint); font-size:11px;"></span>
+      <button class="btn ghost small" onclick="resyncSeed()" title="Force a sync right now">&#8635; Resync from Purchase Form</button>
       <button class="btn ghost small" onclick="dedupeOrders()" title="Remove duplicate PO rows, keeping the most complete version">Clean up duplicates</button>
       <button class="btn ghost small" onclick="backfillFields()" title="Fill in missing GSTIN, vehicle, invoice, and doc-link details from Purchase Form + old FMS">Backfill full details</button>
       <a class="btn ghost" href="https://script.google.com/a/macros/satijapaper.com/s/AKfycbxQNUAtVUGNGBNQBH6sQy_67tmCyiruYf9-quHGxNQKKTkzs9ZeBIIQvV7DEOBCN6m9/exec" target="_blank" style="text-decoration:none; display:inline-block;">Fill Purchase Form &#8599;</a>
@@ -331,8 +332,17 @@ async function seedFromPurchaseForm(){
   render();
 }
 
-async function resyncSeed(){
-  if(APPS_SCRIPT_URL){
+// Both the auto-refresh timer and the manual "Resync" button go through
+// this. resync/seedHistory are additive-only on the backend (never
+// overwrite existing progress), so it's safe to run silently in the
+// background as often as every few minutes.
+let syncInFlight = false;
+async function runSync(showAlert){
+  if(!APPS_SCRIPT_URL || syncInFlight) return;
+  syncInFlight = true;
+  const statusEl = document.getElementById('syncStatus');
+  if(statusEl) statusEl.textContent = 'Syncing…';
+  try{
     const result = await apiCall({action:'resync'});
     const fmsNote = result.oldFmsAvailable === false ? ' (old FMS not reachable, skipped)' : '';
 
@@ -346,8 +356,22 @@ async function resyncSeed(){
       console.error('seedHistory failed', e);
     }
 
-    alert(`${result.added || 0} new orders found. ${result.statusUpdated || 0} orders updated from old FMS. ${historyAdded} missing historical orders added${fmsNote}.`);
+    const summary = `${result.added || 0} new, ${result.statusUpdated || 0} updated from old FMS, ${historyAdded} historical added${fmsNote}`;
+    const stamp = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+    if(statusEl) statusEl.textContent = `Synced ${stamp} · ${summary}`;
+    if(showAlert) alert(summary);
     await loadOrders();
+  }catch(e){
+    console.error('sync failed', e);
+    if(statusEl) statusEl.textContent = 'Sync failed, will retry automatically';
+  }finally{
+    syncInFlight = false;
+  }
+}
+
+async function resyncSeed(){
+  if(APPS_SCRIPT_URL){
+    await runSync(true);
     return;
   }
   if(!confirm('This will reset all existing tracking (step status, invoice qty) and reload from Purchase Form 26-27. Continue?')) return;
@@ -824,6 +848,10 @@ async function completeStep(orderId, stepKey){
 document.getElementById('panel').innerHTML = '<div class="empty"><div class="big">Please sign in first</div>Your data will appear after signing in with the Google button above.</div>';
 window.addEventListener('load', initGoogleSignIn);
 loadOrders();
+// Keep the Sheet in sync automatically - once shortly after opening, then
+// every few minutes while the tab stays open. No more manual clicking.
+setTimeout(() => runSync(false), 4000);
+setInterval(() => runSync(false), 5 * 60 * 1000);
 </script>
 </body>
 </html>
