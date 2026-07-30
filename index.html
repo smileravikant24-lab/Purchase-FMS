@@ -514,7 +514,7 @@ function renderTaskCard(o){
   const po3Fields = s.key === 'PO3' ? [
       ['vehicleNumber','Vehicle number'], ['driverNumber','Driver number'], ['transporterName','Transporter name'],
       ['invoiceNumber','Invoice number'], ['invoiceDate','Invoice date'], ['invoiceAmount','Invoice amount'],
-      ['transferStatus','Transfer status']
+      ['transferStatus','Transfer status'], ['insurance','Insurance'], ['freight','Freight']
     ].map(([field,label]) => `<div class="doc-row"><span>${label}</span><input type="text" id="fld-${o.id}-${s.key}-${field}"></div>`).join('') : '';
   const po4Fields = s.key === 'PO4' ? `<div class="doc-row"><span>Driver status</span><input type="text" id="fld-${o.id}-PO4-driverStatus"></div>` : '';
 
@@ -649,7 +649,8 @@ function renderDetail(o){
     if(s.key === 'PO3'){
       const rows = [['Vehicle', st.vehicleNumber], ['Driver', st.driverNumber], ['Transporter', st.transporterName],
         ['Invoice no.', st.invoiceNumber], ['Invoice date', st.invoiceDate], ['Invoice amount', st.invoiceAmount ? fmtMoney(st.invoiceAmount) : ''],
-        ['Transfer status', st.transferStatus]].filter(([,v]) => v);
+        ['Transfer status', st.transferStatus], ['Insurance', st.insurance ? fmtMoney(st.insurance) : ''],
+        ['Freight', st.freight ? fmtMoney(st.freight) : '']].filter(([,v]) => v);
       if(rows.length) extraFieldsHtml = `<div class="ts" style="margin-top:4px; line-height:1.6;">${rows.map(([k,v])=>`${k}: ${v}`).join('<br>')}</div>`;
     } else if(s.key === 'PO4'){
       const rows = [['Lead time', st.leadTime], ['Driver status', st.driverStatus]].filter(([,v]) => v);
@@ -673,7 +674,7 @@ function renderDetail(o){
       const po3Fields = s.key === 'PO3' ? [
           ['vehicleNumber','Vehicle number'], ['driverNumber','Driver number'], ['transporterName','Transporter name'],
           ['invoiceNumber','Invoice number'], ['invoiceDate','Invoice date'], ['invoiceAmount','Invoice amount'],
-          ['transferStatus','Transfer status']
+          ['transferStatus','Transfer status'], ['insurance','Insurance'], ['freight','Freight']
         ].map(([field,label]) => `<div class="doc-row"><span>${label}</span><input type="text" id="fld-${o.id}-${s.key}-${field}"></div>`).join('') : '';
       const po4Fields = s.key === 'PO4' ? `<div class="doc-row"><span>Driver status</span><input type="text" id="fld-${o.id}-PO4-driverStatus"></div>` : '';
       actionHtml = `<div style="margin-top:8px;">${invInputs}${po3Fields}${po4Fields}${docInputs}
@@ -749,9 +750,9 @@ async function completeStep(orderId, stepKey){
       const el = document.getElementById(`inv-${orderId}-${it.id}`);
       if(el && el.value !== '') it.invoiceQty = parseFloat(el.value);
     });
-    ['vehicleNumber','driverNumber','transporterName','invoiceNumber','invoiceDate','invoiceAmount','transferStatus'].forEach(field => {
+    ['vehicleNumber','driverNumber','transporterName','invoiceNumber','invoiceDate','invoiceAmount','transferStatus','insurance','freight'].forEach(field => {
       const el = document.getElementById(`fld-${orderId}-PO3-${field}`);
-      if(el && el.value !== '') o.steps.PO3[field] = field === 'invoiceAmount' ? parseFloat(el.value) : el.value;
+      if(el && el.value !== '') o.steps.PO3[field] = ['invoiceAmount','insurance','freight'].includes(field) ? parseFloat(el.value) : el.value;
     });
   }
   if(stepKey === 'PO4'){
