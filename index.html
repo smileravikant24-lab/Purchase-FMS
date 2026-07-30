@@ -87,6 +87,13 @@
   .delay-text{font-size:11px; font-weight:600; margin-top:3px;}
   .delay-text.ok{color:var(--accent-ink);}
   .delay-text.late{color:var(--danger);}
+  .confirm-box{background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin-top:10px;}
+  .confirm-group{font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-faint); font-weight:700; margin:12px 0 6px;}
+  .confirm-group:first-child{margin-top:0;}
+  .field-grid{display:grid; grid-template-columns:1fr 1fr; gap:4px 14px;}
+  .field-grid .field{margin-bottom:8px;}
+  .field-hint{display:block; font-size:10.5px; color:var(--ink-faint); font-weight:400; margin-top:3px;}
+  @media (max-width:480px){ .field-grid{grid-template-columns:1fr;} }
   .doc-chip{display:inline-flex; align-items:center; gap:4px; background:var(--accent-soft); color:var(--accent-ink); font-size:11px; font-weight:600; padding:3px 8px; border-radius:5px; margin:2px 4px 2px 0; text-decoration:none;}
   .task-card{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 20px; margin-bottom:14px; box-sizing:border-box; overflow:hidden;}
   .task-card.overdue{border-color:var(--danger);}
@@ -491,6 +498,37 @@ function renderStats(){
   `;
 }
 
+// PO3's full confirmation UI (item qty + transport + invoice + costs), shared
+// by the compact task-card view and the full order-detail view so both stay
+// in sync. Insurance/Freight prefill from the order-level value backfilled
+// from the Purchase Form, with a hint showing that source value alongside
+// the box being confirmed.
+function po3ConfirmSection(o){
+  const invRows = o.items.map(it => `
+      <div class="inv-row">
+        <span style="flex:1;">${it.product}</span>
+        <input type="number" id="inv-${o.id}-${it.id}" value="${it.orderQty}" step="0.01">
+      </div>`).join('');
+
+  const fieldGroup = (title, fields) => {
+    const inputs = fields.map(([field,label,type]) => {
+      const isCost = field === 'insurance' || field === 'freight';
+      const prefill = isCost ? (o[field] || '') : '';
+      const hint = isCost && o[field] ? `<span class="field-hint">Purchase Form mein: ${fmtMoney(o[field])}</span>` : '';
+      return `<div class="field"><label>${label}</label><input type="${type||'text'}" id="fld-${o.id}-PO3-${field}" value="${prefill}">${hint}</div>`;
+    }).join('');
+    return `<div class="confirm-group">${title}</div><div class="field-grid">${inputs}</div>`;
+  };
+
+  return `<div class="confirm-box">
+    <div class="confirm-group">Invoice qty &middot; item-wise</div>
+    ${invRows}
+    ${fieldGroup('Transport', [['vehicleNumber','Vehicle number'], ['driverNumber','Driver number'], ['transporterName','Transporter name']])}
+    ${fieldGroup('Invoice', [['invoiceNumber','Invoice number'], ['invoiceDate','Invoice date','date'], ['invoiceCreditDays','Credit days','number'], ['invoiceAmount','Invoice amount','number'], ['transferStatus','Transfer status']])}
+    ${fieldGroup('Costs &middot; confirm from Purchase Form', [['insurance','Insurance','number'], ['freight','Freight','number']])}
+  </div>`;
+}
+
 function renderTaskCard(o){
   const idx = currentStepIndex(o);
   const s = STEPS[idx];
@@ -506,19 +544,7 @@ function renderTaskCard(o){
       <span class="ts" id="docstat-${o.id}-${s.key}-${safe}" style="min-width:80px;"></span>
     </div>`;
   }).join('');
-  const invInputs = s.key === 'PO3' ? o.items.map(it => `
-      <div class="inv-row">
-        <span style="flex:1;">${it.product}</span>
-        <input type="number" id="inv-${o.id}-${it.id}" value="${it.orderQty}" step="0.01">
-      </div>`).join('') : '';
-  const po3Fields = s.key === 'PO3' ? [
-      ['vehicleNumber','Vehicle number'], ['driverNumber','Driver number'], ['transporterName','Transporter name'],
-      ['invoiceNumber','Invoice number'], ['invoiceDate','Invoice date'], ['invoiceCreditDays','Credit days (invoice)'],
-      ['invoiceAmount','Invoice amount'], ['transferStatus','Transfer status'], ['insurance','Insurance'], ['freight','Freight']
-    ].map(([field,label]) => {
-      const prefill = (field === 'insurance' || field === 'freight') ? (o[field] || '') : '';
-      return `<div class="doc-row"><span>${label}</span><input type="text" id="fld-${o.id}-${s.key}-${field}" value="${prefill}"></div>`;
-    }).join('') : '';
+  const po3Section = s.key === 'PO3' ? po3ConfirmSection(o) : '';
   const po4Fields = s.key === 'PO4' ? `<div class="doc-row"><span>Driver status</span><input type="text" id="fld-${o.id}-PO4-driverStatus"></div>` : '';
 
   return `<div class="task-card ${overdue?'overdue':''}">
@@ -528,7 +554,7 @@ function renderTaskCard(o){
     </div>
     <div class="task-sub">${o.mill} &middot; Planned: ${fmtDate(st.planned)} ${delayText(st)}</div>
     <div class="task-items">${itemsLine}</div>
-    ${invInputs}${po3Fields}${po4Fields}${docInputs}
+    ${po3Section}${po4Fields}${docInputs}
     <button class="btn small" style="margin-top:8px;" onclick="completeStep('${o.id}','${s.key}')">Mark done</button>
   </div>`;
 }
@@ -650,11 +676,16 @@ function renderDetail(o){
       : `<div class="time ${overdue?'late':''}">Done: &mdash;${overdue?' (overdue)':''}</div>`) + delayText(st);
     let extraFieldsHtml = '';
     if(s.key === 'PO3'){
+      const costLine = (confirmed, quoted) => {
+        if(!confirmed) return '';
+        const differs = quoted && Number(quoted) !== Number(confirmed);
+        return fmtMoney(confirmed) + (differs ? ` (Purchase Form: ${fmtMoney(quoted)})` : '');
+      };
       const rows = [['Vehicle', st.vehicleNumber], ['Driver', st.driverNumber], ['Transporter', st.transporterName],
         ['Invoice no.', st.invoiceNumber], ['Invoice date', st.invoiceDate], ['Credit days (invoice)', st.invoiceCreditDays],
         ['Invoice amount', st.invoiceAmount ? fmtMoney(st.invoiceAmount) : ''],
-        ['Transfer status', st.transferStatus], ['Insurance', st.insurance ? fmtMoney(st.insurance) : ''],
-        ['Freight', st.freight ? fmtMoney(st.freight) : '']].filter(([,v]) => v);
+        ['Transfer status', st.transferStatus], ['Insurance', costLine(st.insurance, o.insurance)],
+        ['Freight', costLine(st.freight, o.freight)]].filter(([,v]) => v);
       if(rows.length) extraFieldsHtml = `<div class="ts" style="margin-top:4px; line-height:1.6;">${rows.map(([k,v])=>`${k}: ${v}`).join('<br>')}</div>`;
     } else if(s.key === 'PO4'){
       const rows = [['Lead time', st.leadTime], ['Driver status', st.driverStatus]].filter(([,v]) => v);
@@ -670,21 +701,9 @@ function renderDetail(o){
           <span class="ts" id="docstat-${o.id}-${s.key}-${safe}" style="min-width:80px;"></span>
         </div>`;
       }).join('');
-      const invInputs = s.key === 'PO3' ? o.items.map(it => `
-          <div class="inv-row">
-            <span style="flex:1;">${it.product}</span>
-            <input type="number" id="inv-${o.id}-${it.id}" value="${it.orderQty}" step="0.01">
-          </div>`).join('') : '';
-      const po3Fields = s.key === 'PO3' ? [
-          ['vehicleNumber','Vehicle number'], ['driverNumber','Driver number'], ['transporterName','Transporter name'],
-          ['invoiceNumber','Invoice number'], ['invoiceDate','Invoice date'], ['invoiceCreditDays','Credit days (invoice)'],
-          ['invoiceAmount','Invoice amount'], ['transferStatus','Transfer status'], ['insurance','Insurance'], ['freight','Freight']
-        ].map(([field,label]) => {
-          const prefill = (field === 'insurance' || field === 'freight') ? (o[field] || '') : '';
-          return `<div class="doc-row"><span>${label}</span><input type="text" id="fld-${o.id}-${s.key}-${field}" value="${prefill}"></div>`;
-        }).join('') : '';
+      const po3Section = s.key === 'PO3' ? po3ConfirmSection(o) : '';
       const po4Fields = s.key === 'PO4' ? `<div class="doc-row"><span>Driver status</span><input type="text" id="fld-${o.id}-PO4-driverStatus"></div>` : '';
-      actionHtml = `<div style="margin-top:8px;">${invInputs}${po3Fields}${po4Fields}${docInputs}
+      actionHtml = `<div style="margin-top:8px;">${po3Section}${po4Fields}${docInputs}
           <button class="btn small" style="margin-top:6px;" onclick="completeStep('${o.id}','${s.key}')">Mark done</button>
         </div>`;
     } else if(st.status === 'done' && s.docs.length){
