@@ -530,7 +530,7 @@ function renderStats(){
 function po3ConfirmSection(o){
   const invRows = o.items.map(it => `
       <div class="inv-row">
-        <span style="flex:1;">${it.product}<span class="field-hint">Order qty tha: ${it.orderQty} ${it.unit}</span></span>
+        <span style="flex:1;">${it.product}<span class="field-hint">Order qty: ${it.orderQty} ${it.unit}</span></span>
         <input type="number" id="inv-${o.id}-${it.id}" value="${it.orderQty}" step="0.01">
       </div>`).join('');
 
@@ -539,7 +539,7 @@ function po3ConfirmSection(o){
     const inputs = fields.map(([field,label,type]) => {
       const isCost = field === 'insurance' || field === 'freight';
       const prefill = isCost && hasVal(o[field]) ? o[field] : '';
-      const hint = isCost && hasVal(o[field]) ? `<span class="field-hint">Purchase Form mein: ${fmtMoney(o[field])}</span>` : '';
+      const hint = isCost && hasVal(o[field]) ? `<span class="field-hint">From Purchase Form: ${fmtMoney(o[field])}</span>` : '';
       return `<div class="field"><label>${label}</label><input type="${type||'text'}" id="fld-${o.id}-PO3-${field}" value="${prefill}">${hint}</div>`;
     }).join('');
     return `<div class="confirm-group">${title}</div><div class="field-grid">${inputs}</div>`;
@@ -732,7 +732,7 @@ function renderDetail(o){
       const po3Section = s.key === 'PO3' ? po3ConfirmSection(o) : '';
       const po4Fields = s.key === 'PO4' ? `<div class="doc-row"><span>Driver status</span><input type="text" id="fld-${o.id}-PO4-driverStatus"></div>` : '';
       currentPanelHtml = `<div style="margin-top:14px; padding:14px 16px; border:1px solid var(--border); border-radius:10px; background:var(--surface);">
-          <h4 style="margin:0 0 4px;">${s.key} &middot; ${s.label} &mdash; confirm karein</h4>
+          <h4 style="margin:0 0 4px;">${s.key} &middot; ${s.label} &mdash; confirm</h4>
           ${po3Section}${po4Fields}${docInputs}
           <button class="btn small" style="margin-top:10px;" onclick="completeStep('${o.id}','${s.key}')">Mark done</button>
         </div>`;
