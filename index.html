@@ -534,11 +534,12 @@ function po3ConfirmSection(o){
         <input type="number" id="inv-${o.id}-${it.id}" value="${it.orderQty}" step="0.01">
       </div>`).join('');
 
+  const hasVal = v => v !== undefined && v !== null && v !== '';
   const fieldGroup = (title, fields) => {
     const inputs = fields.map(([field,label,type]) => {
       const isCost = field === 'insurance' || field === 'freight';
-      const prefill = isCost ? (o[field] || '') : '';
-      const hint = isCost && o[field] ? `<span class="field-hint">Purchase Form mein: ${fmtMoney(o[field])}</span>` : '';
+      const prefill = isCost && hasVal(o[field]) ? o[field] : '';
+      const hint = isCost && hasVal(o[field]) ? `<span class="field-hint">Purchase Form mein: ${fmtMoney(o[field])}</span>` : '';
       return `<div class="field"><label>${label}</label><input type="${type||'text'}" id="fld-${o.id}-PO3-${field}" value="${prefill}">${hint}</div>`;
     }).join('');
     return `<div class="confirm-group">${title}</div><div class="field-grid">${inputs}</div>`;
@@ -701,16 +702,17 @@ function renderDetail(o){
       : `<div class="time ${overdue?'late':''}">Done: &mdash;${overdue?' (overdue)':''}</div>`) + delayText(st);
     let extraFieldsHtml = '';
     if(s.key === 'PO3'){
+      const hasVal = v => v !== undefined && v !== null && v !== '';
       const costLine = (confirmed, quoted) => {
-        if(!confirmed) return '';
-        const differs = quoted && Number(quoted) !== Number(confirmed);
+        if(!hasVal(confirmed)) return '';
+        const differs = hasVal(quoted) && Number(quoted) !== Number(confirmed);
         return fmtMoney(confirmed) + (differs ? ` (Purchase Form: ${fmtMoney(quoted)})` : '');
       };
       const rows = [['Vehicle', st.vehicleNumber], ['Driver', st.driverNumber], ['Transporter', st.transporterName],
         ['Invoice no.', st.invoiceNumber], ['Invoice date', st.invoiceDate], ['Credit days (invoice)', st.invoiceCreditDays],
-        ['Invoice amount', st.invoiceAmount ? fmtMoney(st.invoiceAmount) : ''],
+        ['Invoice amount', hasVal(st.invoiceAmount) ? fmtMoney(st.invoiceAmount) : ''],
         ['Transfer status', st.transferStatus], ['Insurance', costLine(st.insurance, o.insurance)],
-        ['Freight', costLine(st.freight, o.freight)]].filter(([,v]) => v);
+        ['Freight', costLine(st.freight, o.freight)]].filter(([,v]) => hasVal(v));
       if(rows.length) extraFieldsHtml = `<div class="ts" style="margin-top:4px; line-height:1.6;">${rows.map(([k,v])=>`${k}: ${v}`).join('<br>')}</div>`;
     } else if(s.key === 'PO4'){
       const rows = [['Lead time', st.leadTime], ['Driver status', st.driverStatus]].filter(([,v]) => v);
