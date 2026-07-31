@@ -177,6 +177,7 @@ const PURCHASE_FORM_URL = 'https://docs.google.com/spreadsheets/d/1bzFrGTL-oaGrr
 let currentUser = 'all';
 let pendingDocs = {};
 let signedIn = false;
+const stepInFlight = new Set();
 
 // ===== GOOGLE SIGN-IN CONFIG =====
 // Google Cloud Console > APIs & Services > Credentials > Create OAuth client ID
@@ -580,7 +581,7 @@ function renderTaskCard(o){
     <div class="task-sub">${o.mill} &middot; Planned: ${fmtDate(st.planned)} ${delayText(st)}</div>
     <div class="task-items">${itemsLine}</div>
     ${po3Section}${po4Fields}${docInputs}
-    <button class="btn small" style="margin-top:8px;" onclick="completeStep('${o.id}','${s.key}')">Mark done</button>
+    <button class="btn small" id="markdone-${o.id}-${s.key}" style="margin-top:8px;" onclick="completeStep('${o.id}','${s.key}')">Mark done</button>
   </div>`;
 }
 
@@ -734,7 +735,7 @@ function renderDetail(o){
       currentPanelHtml = `<div style="margin-top:14px; padding:14px 16px; border:1px solid var(--border); border-radius:10px; background:var(--surface);">
           <h4 style="margin:0 0 4px;">${s.key} &middot; ${s.label} &mdash; confirm</h4>
           ${po3Section}${po4Fields}${docInputs}
-          <button class="btn small" style="margin-top:10px;" onclick="completeStep('${o.id}','${s.key}')">Mark done</button>
+          <button class="btn small" id="markdone-${o.id}-${s.key}" style="margin-top:10px;" onclick="completeStep('${o.id}','${s.key}')">Mark done</button>
         </div>`;
     } else if(st.status === 'done' && s.docs.length){
       const chips = s.docs.map(d => {
@@ -797,6 +798,25 @@ function toggleExpand(id){
 }
 
 async function completeStep(orderId, stepKey){
+  const flightKey = orderId + '|' + stepKey;
+  if(stepInFlight.has(flightKey)) return;
+  stepInFlight.add(flightKey);
+  const btn = document.getElementById(`markdone-${orderId}-${stepKey}`);
+  if(btn){ btn.disabled = true; btn.textContent = 'Saving…'; }
+
+  try{
+    await doCompleteStep(orderId, stepKey);
+  } finally {
+    stepInFlight.delete(flightKey);
+    // If completeStep succeeded, render() already replaced this button with a
+    // fresh one - resetting this now-detached node is harmless. If it exited
+    // early (declined confirm, error) the button is still live, so this is
+    // what re-enables it.
+    if(btn){ btn.disabled = false; btn.textContent = 'Mark done'; }
+  }
+}
+
+async function doCompleteStep(orderId, stepKey){
   const o = orders.find(x => x.id === orderId);
   if(!o) return;
   const stepDef = STEPS.find(s => s.key === stepKey);
