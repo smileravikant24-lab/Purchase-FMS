@@ -154,14 +154,17 @@
     </div>
   </div>
 
-  <div id="adminControls" style="display:none; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap;">
-    <input type="text" id="searchBox" placeholder="Search by PO number or mill..." oninput="setSearchQuery(this.value)" style="flex:1; min-width:200px; padding:9px 12px; border:1px solid var(--border-strong); border-radius:7px; font-family:inherit; font-size:13px;">
+  <div id="filterControls" style="display:none; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap;">
     <select id="filterMillSelect" onchange="setFilterMill(this.value)" style="padding:9px 10px; border:1px solid var(--border-strong); border-radius:7px; font-family:inherit; font-size:13px;">
       <option value="">All mills</option>
     </select>
     <select id="filterPOSelect" onchange="setFilterPO(this.value)" style="padding:9px 10px; border:1px solid var(--border-strong); border-radius:7px; font-family:inherit; font-size:13px;">
       <option value="">All PO numbers</option>
     </select>
+  </div>
+
+  <div id="adminControls" style="display:none; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap;">
+    <input type="text" id="searchBox" placeholder="Search by PO number or mill..." oninput="setSearchQuery(this.value)" style="flex:1; min-width:200px; padding:9px 12px; border:1px solid var(--border-strong); border-radius:7px; font-family:inherit; font-size:13px;">
     <button class="btn small" id="btn-tab-pending" onclick="setAdminTab('pending')">Pending</button>
     <button class="btn ghost small" id="btn-tab-completed" onclick="setAdminTab('completed')">Completed</button>
   </div>
@@ -217,6 +220,7 @@ async function onGoogleSignIn(response){
   document.getElementById('signedOutView').style.display = 'none';
   document.getElementById('signedInView').style.display = 'flex';
   document.getElementById('signedInEmail').textContent = email;
+  document.getElementById('filterControls').style.display = 'flex';
 
   if(ADMIN_EMAILS.includes(email)){
     document.getElementById('adminSwitcher').style.display = 'flex';
@@ -226,6 +230,7 @@ async function onGoogleSignIn(response){
     await setCurrentUser(STAFF_EMAILS[email]);
   } else {
     document.getElementById('adminSwitcher').style.display = 'none';
+    document.getElementById('filterControls').style.display = 'none';
     document.getElementById('panel').innerHTML = '<div class="empty"><div class="big">No access</div>This email is not registered in this system.</div>';
     document.getElementById('stats').innerHTML = '';
   }
@@ -237,6 +242,7 @@ function signOutUser(){
   document.getElementById('signedInView').style.display = 'none';
   document.getElementById('signedOutView').style.display = 'flex';
   document.getElementById('adminSwitcher').style.display = 'none';
+  document.getElementById('filterControls').style.display = 'none';
   document.getElementById('stats').innerHTML = '';
   document.getElementById('panel').innerHTML = '<div class="empty"><div class="big">Please sign in first</div>Your data will appear after signing in with the Google button above.</div>';
   if(window.google) google.accounts.id.disableAutoSelect();
