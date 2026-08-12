@@ -253,7 +253,10 @@ async function apiCall(payload){
     headers: {'Content-Type': 'text/plain;charset=utf-8'},
     body: JSON.stringify(payload)
   });
-  return res.json();
+  if(!res.ok) throw new Error(`Server error (${res.status})`);
+  const data = await res.json();
+  if(data && data.error) throw new Error(data.error);
+  return data;
 }
 
 // Storage abstraction: real backend if configured, otherwise Claude test-storage.
@@ -414,8 +417,11 @@ async function dedupeOrders(){
 async function saveOrder(o){
   try{
     await backendSaveOrder(o);
+    return true;
   }catch(e){
     console.error('save failed', e);
+    alert(`Could not save "${o.id}" to the sheet: ${e.message || e}\n\nWhat you filled in is still shown on screen, but it has NOT been saved. Please check your connection and try "Mark done" again - if you reload the page first, this data will be lost.`);
+    return false;
   }
 }
 
@@ -894,20 +900,30 @@ async function doCompleteStep(orderId, stepKey){
   }
 
   const docsFlag = {};
+  const failedUploads = [];
   for(const d of Object.keys(uploaded)){
     try{
       const result = await backendUploadDoc(orderId, stepKey, d, uploaded[d].name, uploaded[d].dataUrl.split(';')[0].split(':')[1], uploaded[d].dataUrl);
       docsFlag[d] = { name: uploaded[d].name, url: result.url || null };
     }catch(e){
       console.error('doc save failed', e);
+      failedUploads.push(d);
     }
+  }
+  if(failedUploads.length){
+    alert(`Could not upload: ${failedUploads.join(', ')}. Please check your connection and try again - these file(s) were kept selected so you can retry.`);
+    return;
   }
 
   o.steps[stepKey].status = 'done';
   o.steps[stepKey].actual = Date.now();
   if(Object.keys(docsFlag).length) o.steps[stepKey].docs = docsFlag;
   if(pendingDocs[orderId]) delete pendingDocs[orderId][stepKey];
-  await saveOrder(o);
+  const saved = await saveOrder(o);
+  if(!saved){
+    o.steps[stepKey].status = 'pending';
+    o.steps[stepKey].actual = null;
+  }
   render();
 }
 
