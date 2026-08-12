@@ -156,6 +156,12 @@
 
   <div id="adminControls" style="display:none; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap;">
     <input type="text" id="searchBox" placeholder="Search by PO number or mill..." oninput="setSearchQuery(this.value)" style="flex:1; min-width:200px; padding:9px 12px; border:1px solid var(--border-strong); border-radius:7px; font-family:inherit; font-size:13px;">
+    <select id="filterMillSelect" onchange="setFilterMill(this.value)" style="padding:9px 10px; border:1px solid var(--border-strong); border-radius:7px; font-family:inherit; font-size:13px;">
+      <option value="">All mills</option>
+    </select>
+    <select id="filterPOSelect" onchange="setFilterPO(this.value)" style="padding:9px 10px; border:1px solid var(--border-strong); border-radius:7px; font-family:inherit; font-size:13px;">
+      <option value="">All PO numbers</option>
+    </select>
     <button class="btn small" id="btn-tab-pending" onclick="setAdminTab('pending')">Pending</button>
     <button class="btn ghost small" id="btn-tab-completed" onclick="setAdminTab('completed')">Completed</button>
   </div>
@@ -480,9 +486,29 @@ function updateLoginButtons(){
 
 let adminTab = 'pending';
 let searchQuery = '';
+let filterMill = '';
+let filterPO = '';
+
+function setFilterMill(v){ filterMill = v; render(); }
+function setFilterPO(v){ filterPO = v; render(); }
+
+// Rebuilt on every admin render from the current order list, keeping the
+// user's current selection intact rather than resetting it.
+function populateFilterOptions(){
+  const millSel = document.getElementById('filterMillSelect');
+  const poSel = document.getElementById('filterPOSelect');
+  if(!millSel || !poSel) return;
+  const mills = [...new Set(orders.map(o => o.mill).filter(Boolean))].sort();
+  const pos = [...new Set(orders.map(o => o.id))].sort((a,b) => poNumber(b) - poNumber(a));
+  const opts = (values, current) => values.map(v => `<option value="${v}" ${v===current?'selected':''}>${v}</option>`).join('');
+  millSel.innerHTML = `<option value="">All mills</option>` + opts(mills, filterMill);
+  poSel.innerHTML = `<option value="">All PO numbers</option>` + opts(pos, filterPO);
+}
 
 function visibleOrders(){
   let base = orders;
+  if(filterMill) base = base.filter(o => o.mill === filterMill);
+  if(filterPO) base = base.filter(o => o.id === filterPO);
   if(searchQuery.trim()){
     const q = searchQuery.trim().toLowerCase();
     return base.filter(o => o.id.toLowerCase().includes(q) || o.mill.toLowerCase().includes(q));
@@ -506,6 +532,7 @@ function setAdminTab(tab){
 
 function render(){
   if(!signedIn) return;
+  populateFilterOptions();
   renderStats();
   renderPanel();
 }
@@ -536,8 +563,16 @@ function po3ConfirmSection(o){
       </div>`).join('');
 
   const hasVal = v => v !== undefined && v !== null && v !== '';
+  const curTransferStatus = (o.steps.PO3 && o.steps.PO3.transferStatus) || '';
   const fieldGroup = (title, fields) => {
     const inputs = fields.map(([field,label,type]) => {
+      if(field === 'transferStatus'){
+        return `<div class="field"><label>${label}</label><select id="fld-${o.id}-PO3-${field}">
+          <option value="">Select</option>
+          <option value="Yes" ${curTransferStatus==='Yes'?'selected':''}>Yes</option>
+          <option value="No" ${curTransferStatus==='No'?'selected':''}>No</option>
+        </select><span class="field-hint">If "No", this order cannot move past PO3 until confirmed as "Yes".</span></div>`;
+      }
       const isCost = field === 'insurance' || field === 'freight';
       const prefill = isCost && hasVal(o[field]) ? o[field] : '';
       const hint = isCost && hasVal(o[field]) ? `<span class="field-hint">From Purchase Form: ${fmtMoney(o[field])}</span>` : '';
@@ -546,7 +581,12 @@ function po3ConfirmSection(o){
     return `<div class="confirm-group">${title}</div><div class="field-grid">${inputs}</div>`;
   };
 
+  const blockedNote = curTransferStatus === 'No'
+    ? `<div class="badge danger" style="margin-bottom:10px; display:inline-block;">Transfer status: No &mdash; further steps are closed until this is set to Yes</div>`
+    : '';
+
   return `<div class="confirm-box">
+    ${blockedNote}
     <div class="confirm-group">Invoice qty &middot; item-wise</div>
     ${invRows}
     ${fieldGroup('Transport', [['vehicleNumber','Vehicle number'], ['driverNumber','Driver number'], ['transporterName','Transporter name']])}
@@ -830,6 +870,12 @@ async function doCompleteStep(orderId, stepKey){
       const el = document.getElementById(`fld-${orderId}-PO3-${field}`);
       if(el && el.value !== '') o.steps.PO3[field] = ['invoiceCreditDays','invoiceAmount','insurance','freight'].includes(field) ? parseFloat(el.value) : el.value;
     });
+    if(o.steps.PO3.transferStatus === 'No'){
+      alert('Transfer status is "No" - this order cannot move to the next step until it is confirmed as "Yes".');
+      await saveOrder(o);
+      render();
+      return;
+    }
   }
   if(stepKey === 'PO4'){
     const el = document.getElementById(`fld-${orderId}-PO4-driverStatus`);
