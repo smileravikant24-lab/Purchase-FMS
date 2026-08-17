@@ -173,6 +173,9 @@ const STEPS = [
   {key:'PO5', label:'Warehouse delivery', hours:96, doerName:'Ms. Pooja', doerEmail:'poojasatijapaper@gmail.com', docs:['Godown Slip','GR Signed Copy']},
   {key:'PO6', label:'Transporter + GR', hours:120, doerName:'Ms. Pooja', doerEmail:'poojasatijapaper@gmail.com', docs:['E-Way Bill','GR Copy']},
 ];
+// Docs that cannot be skipped with a confirm dialog - the step simply won't
+// complete without them.
+const MANDATORY_DOCS = { PO3: ['Invoice PDF'] };
 const PURCHASE_FORM_URL = 'https://docs.google.com/spreadsheets/d/1bzFrGTL-oaGrrjyXgI8WJuKOzgJG2-9jcD8r80QR73w/edit';
 let currentUser = 'all';
 let pendingDocs = {};
@@ -504,10 +507,31 @@ function setAdminTab(tab){
   render();
 }
 
+// Background auto-sync calls render() every few minutes. Without this,
+// re-rendering the panel wipes out whatever a user has typed into an
+// in-progress step's confirm form (e.g. PO3 vehicle/invoice/driver details)
+// before they hit "Mark done" - so capture and reapply those values around
+// every render.
+function captureUnsavedInputs(){
+  const state = {};
+  document.querySelectorAll('#panel input[id^="fld-"], #panel input[id^="inv-"], #panel select[id^="fld-"]').forEach(el => {
+    if(el.value !== '') state[el.id] = el.value;
+  });
+  return state;
+}
+function restoreUnsavedInputs(state){
+  Object.keys(state).forEach(id => {
+    const el = document.getElementById(id);
+    if(el && el.value === '') el.value = state[id];
+  });
+}
+
 function render(){
   if(!signedIn) return;
+  const unsaved = captureUnsavedInputs();
   renderStats();
   renderPanel();
+  restoreUnsavedInputs(unsaved);
 }
 
 function renderStats(){
@@ -537,11 +561,15 @@ function po3ConfirmSection(o){
 
   const hasVal = v => v !== undefined && v !== null && v !== '';
   const fieldGroup = (title, fields) => {
-    const inputs = fields.map(([field,label,type]) => {
+    const inputs = fields.map(([field,label,type,extra]) => {
       const isCost = field === 'insurance' || field === 'freight';
       const prefill = isCost && hasVal(o[field]) ? o[field] : '';
       const hint = isCost && hasVal(o[field]) ? `<span class="field-hint">From Purchase Form: ${fmtMoney(o[field])}</span>` : '';
-      return `<div class="field"><label>${label}</label><input type="${type||'text'}" id="fld-${o.id}-PO3-${field}" value="${prefill}">${hint}</div>`;
+      if(type === 'select'){
+        const options = extra.map(opt => `<option value="${opt}">${opt}</option>`).join('');
+        return `<div class="field"><label>${label}</label><select id="fld-${o.id}-PO3-${field}"><option value=""></option>${options}</select>${hint}</div>`;
+      }
+      return `<div class="field"><label>${label}</label><input type="${type||'text'}" id="fld-${o.id}-PO3-${field}" value="${prefill}" ${extra||''}>${hint}</div>`;
     }).join('');
     return `<div class="confirm-group">${title}</div><div class="field-grid">${inputs}</div>`;
   };
@@ -549,8 +577,8 @@ function po3ConfirmSection(o){
   return `<div class="confirm-box">
     <div class="confirm-group">Invoice qty &middot; item-wise</div>
     ${invRows}
-    ${fieldGroup('Transport', [['vehicleNumber','Vehicle number'], ['driverNumber','Driver number'], ['transporterName','Transporter name']])}
-    ${fieldGroup('Invoice', [['invoiceNumber','Invoice number'], ['invoiceDate','Invoice date','date'], ['invoiceCreditDays','Credit days','number'], ['invoiceAmount','Invoice amount','number'], ['transferStatus','Transfer status']])}
+    ${fieldGroup('Transport', [['vehicleNumber','Vehicle number'], ['driverNumber','Driver mobile number','tel','maxlength="10" pattern="[0-9]{10}" inputmode="numeric" placeholder="10-digit mobile no."'], ['transporterName','Transporter name']])}
+    ${fieldGroup('Invoice', [['invoiceNumber','Invoice number'], ['invoiceDate','Invoice date','date'], ['invoiceCreditDays','Credit days','number'], ['invoiceAmount','Invoice amount','number'], ['transferStatus','Transfer status (drop?)','select',['No','Yes']]])}
     ${fieldGroup('Costs &middot; confirm from Purchase Form', [['insurance','Insurance','number'], ['freight','Freight','number']])}
   </div>`;
 }
@@ -830,6 +858,10 @@ async function doCompleteStep(orderId, stepKey){
       const el = document.getElementById(`fld-${orderId}-PO3-${field}`);
       if(el && el.value !== '') o.steps.PO3[field] = ['invoiceCreditDays','invoiceAmount','insurance','freight'].includes(field) ? parseFloat(el.value) : el.value;
     });
+    if(o.steps.PO3.driverNumber && !/^\d{10}$/.test(o.steps.PO3.driverNumber)){
+      alert('Driver mobile number must be exactly 10 digits.');
+      return;
+    }
   }
   if(stepKey === 'PO4'){
     const el = document.getElementById(`fld-${orderId}-PO4-driverStatus`);
@@ -841,10 +873,18 @@ async function doCompleteStep(orderId, stepKey){
   }
 
   const uploaded = (pendingDocs[orderId] && pendingDocs[orderId][stepKey]) || {};
+  const alreadyHave = (o.steps[stepKey].docs) || {};
   let missing = [];
-  stepDef.docs.forEach(d => { if(!uploaded[d]) missing.push(d); });
-  if(missing.length){
-    if(!confirm(`${missing.join(', ')} not uploaded. Complete this step anyway without the document?`)) return;
+  stepDef.docs.forEach(d => { if(!uploaded[d] && !alreadyHave[d]) missing.push(d); });
+  const mandatory = MANDATORY_DOCS[stepKey] || [];
+  const missingMandatory = missing.filter(d => mandatory.includes(d));
+  if(missingMandatory.length){
+    alert(`${missingMandatory.join(', ')} is mandatory. Please upload it before marking this step done.`);
+    return;
+  }
+  const missingOptional = missing.filter(d => !mandatory.includes(d));
+  if(missingOptional.length){
+    if(!confirm(`${missingOptional.join(', ')} not uploaded. Complete this step anyway without the document?`)) return;
   }
 
   const docsFlag = {};
@@ -861,6 +901,18 @@ async function doCompleteStep(orderId, stepKey){
   o.steps[stepKey].actual = Date.now();
   if(Object.keys(docsFlag).length) o.steps[stepKey].docs = docsFlag;
   if(pendingDocs[orderId]) delete pendingDocs[orderId][stepKey];
+
+  // A dropped transfer (Transfer status = Yes) means the order never goes
+  // through warehouse delivery/transporter follow-up - close out every
+  // remaining step so it doesn't sit around looking pending.
+  if(stepKey === 'PO3' && o.steps.PO3.transferStatus === 'Yes'){
+    const idx = STEPS.findIndex(s => s.key === 'PO3');
+    STEPS.slice(idx + 1).forEach(s => {
+      o.steps[s.key].status = 'done';
+      o.steps[s.key].actual = Date.now();
+    });
+  }
+
   await saveOrder(o);
   render();
 }
