@@ -1,4 +1,5 @@
 const SHEET_NAME = 'Orders';
+const MASTER_DATA_SHEET_NAME = 'Master Data';
 const DOC_FOLDER_NAME = 'Satija Purchase Docs';
 const PURCHASE_FORM_SHEET_ID = '1bzFrGTL-oaGrrjyXgI8WJuKOzgJG2-9jcD8r80QR73w';
 const OLD_FMS_SHEET_ID = '1XrykdT3AGzqeWxyxTjwW-wx_ah9g1vXsz7VaB90pVgQ';
@@ -81,6 +82,9 @@ function handleRequest(e) {
     }
     if (['saveOrder','resync','dedupe','backfill','seedHistory'].includes(action)) {
       try { regenerateFlatView(); } catch (flatErr) { /* don't fail the real action over this */ }
+    }
+    if (['resync','backfill'].includes(action)) {
+      try { regenerateMasterDataView(); } catch (mdErr) { /* don't fail the real action over this */ }
     }
   } catch (err) {
     result = { error: err.message };
@@ -504,6 +508,33 @@ function backfillFullFields() {
   return { updated: updated };
 }
 
+// Copies the Purchase Form as-is - every column, in whatever order it's on
+// the form right now - into a "Master Data" sheet on this spreadsheet, so
+// anything filled on the form shows up here too, in readable form, under
+// the same column name. Matched by column name (not position), so it stays
+// correct even if columns get reordered or new ones get added on the form.
+// Dates render as dd/MM/yyyy instead of raw serials.
+function regenerateMasterDataView() {
+  const formSS = SpreadsheetApp.openById(PURCHASE_FORM_SHEET_ID);
+  const formSheet = formSS.getSheets()[0];
+  const formData = formSheet.getDataRange().getValues();
+  if (!formData.length) return;
+  const header = formData[0].map(h => String(h).trim());
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(MASTER_DATA_SHEET_NAME);
+  if (!sheet) sheet = ss.insertSheet(MASTER_DATA_SHEET_NAME);
+  sheet.clear();
+
+  const tz = Session.getScriptTimeZone();
+  const rows = formData.slice(1)
+    .filter(row => row.some(v => v !== '' && v !== null))
+    .map(row => row.map(v => v instanceof Date ? Utilities.formatDate(v, tz, 'dd/MM/yyyy') : v));
+
+  sheet.getRange(1, 1, 1, header.length).setValues([header]);
+  if (rows.length) sheet.getRange(2, 1, rows.length, header.length).setValues(rows);
+}
+
 const FLAT_SHEET_NAME = 'Orders (Readable)';
 
 // Reads a step's uploaded-doc URL by label (e.g. 'Invoice PDF'), if present.
@@ -610,4 +641,5 @@ function setupAutoSyncTrigger() {
 function autoSync() {
   syncFromPurchaseForm();
   try { syncStatusFromOldFMS(); } catch (e) {}
+  try { regenerateMasterDataView(); } catch (e) {}
 }
