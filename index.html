@@ -147,8 +147,6 @@
       <span id="adminSwitcher" style="display:none; gap:8px; flex-wrap:wrap;">
         <button class="btn small" id="btn-all" onclick="setCurrentUser('all')">Admin (view all)</button>
         <button class="btn ghost small" id="btn-sandeep" onclick="setCurrentUser('satijapaper@gmail.com')">Sandeep</button>
-
-        <button class="btn ghost small" id="btn-pooja" onclick="setCurrentUser('poojasatijapaper@gmail.com')">Pooja</button>
       </span>
       <button class="btn ghost small" onclick="signOutUser()">Sign out</button>
     </div>
@@ -166,12 +164,12 @@
 
 <script>
 const STEPS = [
-  {key:'PO1', label:'Order placed', hours:0, doerName:'Mr. Sandeep Dhawan', doerEmail:'satijapaper@gmail.com', docs:[]},
-  {key:'PO2', label:'Mill confirms', hours:24, doerName:'Mr. Sandeep Dhawan', doerEmail:'satijapaper@gmail.com', docs:['Confirmation PDF']},
-  {key:'PO3', label:'Dispatch + invoice', hours:48, doerName:'Mr. Sandeep Dhawan', doerEmail:'satijapaper@gmail.com', docs:['Packing List','Invoice PDF']},
-  {key:'PO4', label:'Driver follow-up', hours:72, doerName:'Mr. Sandeep Dhawan', doerEmail:'satijapaper@gmail.com', docs:[]},
-  {key:'PO5', label:'Warehouse delivery', hours:96, doerName:'Ms. Pooja', doerEmail:'poojasatijapaper@gmail.com', docs:['Godown Slip','GR Signed Copy']},
-  {key:'PO6', label:'Transporter + GR', hours:120, doerName:'Ms. Pooja', doerEmail:'poojasatijapaper@gmail.com', docs:['E-Way Bill','GR Copy']},
+  {key:'PO1', label:'Order placed', hours:0, doerName:'Mr. Sandeep Dhawan', doerEmails:['satijapaper@gmail.com'], docs:[]},
+  {key:'PO2', label:'Mill confirms', hours:24, doerName:'Mr. Sandeep Dhawan', doerEmails:['satijapaper@gmail.com'], docs:['Confirmation PDF']},
+  {key:'PO3', label:'Dispatch + invoice', hours:48, doerName:'Mr. Sandeep Dhawan', doerEmails:['satijapaper@gmail.com'], docs:['Packing List','Invoice PDF']},
+  {key:'PO4', label:'Driver follow-up', hours:72, doerName:'Mr. Sandeep Dhawan', doerEmails:['satijapaper@gmail.com'], docs:[]},
+  {key:'PO5', label:'Warehouse delivery', hours:96, doerName:'Mr. Sandeep Dhawan', doerEmails:['satijapaper@gmail.com'], docs:['Godown Slip','GR Signed Copy']},
+  {key:'PO6', label:'Transporter + GR', hours:120, doerName:'Mr. Sandeep Dhawan', doerEmails:['satijapaper@gmail.com'], docs:['E-Way Bill','GR Copy']},
 ];
 // Docs that cannot be skipped with a confirm dialog - the step simply won't
 // complete without them.
@@ -189,8 +187,7 @@ const stepInFlight = new Set();
 const GOOGLE_CLIENT_ID = '347959572660-jl2k07qdhvqraj900jgfrbp9ljsddh62.apps.googleusercontent.com';
 const ADMIN_EMAILS = ['mis@satijapaper.com'];
 const STAFF_EMAILS = {
-  'satijapaper@gmail.com': 'satijapaper@gmail.com',
-  'poojasatijapaper@gmail.com': 'poojasatijapaper@gmail.com'
+  'satijapaper@gmail.com': 'satijapaper@gmail.com'
 };
 
 function initGoogleSignIn(){
@@ -474,8 +471,8 @@ function setSearchQuery(v){
 }
 
 function updateLoginButtons(){
-  ['all','satijapaper@gmail.com','poojasatijapaper@gmail.com'].forEach(v => {
-    const id = v === 'all' ? 'btn-all' : (v === 'satijapaper@gmail.com' ? 'btn-sandeep' : 'btn-pooja');
+  ['all','satijapaper@gmail.com'].forEach(v => {
+    const id = v === 'all' ? 'btn-all' : 'btn-sandeep';
     const el = document.getElementById(id);
     if(el) el.className = (v === currentUser) ? 'btn small' : 'btn ghost small';
   });
@@ -493,7 +490,7 @@ function visibleOrders(){
   const done = base.filter(o => currentStepIndex(o) >= STEPS.length);
   const notDone = base.filter(o => currentStepIndex(o) < STEPS.length);
   if(currentUser === 'all') return adminTab === 'completed' ? done : notDone;
-  return notDone.filter(o => STEPS[currentStepIndex(o)].doerEmail === currentUser);
+  return notDone.filter(o => STEPS[currentStepIndex(o)].doerEmails.includes(currentUser));
 }
 
 function setAdminTab(tab){
@@ -634,7 +631,7 @@ function renderPanel(){
     return;
   }
   if(currentUser !== 'all'){
-    const myStepKeys = STEPS.filter(s => s.doerEmail === currentUser).map(s => s.key);
+    const myStepKeys = STEPS.filter(s => s.doerEmails.includes(currentUser)).map(s => s.key);
     let html = '';
     let anyWork = false;
     myStepKeys.forEach(stepKey => {
