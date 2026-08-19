@@ -147,8 +147,6 @@
       <span id="adminSwitcher" style="display:none; gap:8px; flex-wrap:wrap;">
         <button class="btn small" id="btn-all" onclick="setCurrentUser('all')">Admin (view all)</button>
         <button class="btn ghost small" id="btn-sandeep" onclick="setCurrentUser('satijapaper@gmail.com')">Sandeep</button>
-
-        <button class="btn ghost small" id="btn-pooja" onclick="setCurrentUser('poojasatijapaper@gmail.com')">Pooja</button>
       </span>
       <button class="btn ghost small" onclick="signOutUser()">Sign out</button>
     </div>
@@ -474,8 +472,8 @@ function setSearchQuery(v){
 }
 
 function updateLoginButtons(){
-  ['all','satijapaper@gmail.com','poojasatijapaper@gmail.com'].forEach(v => {
-    const id = v === 'all' ? 'btn-all' : (v === 'satijapaper@gmail.com' ? 'btn-sandeep' : 'btn-pooja');
+  ['all','satijapaper@gmail.com'].forEach(v => {
+    const id = v === 'all' ? 'btn-all' : 'btn-sandeep';
     const el = document.getElementById(id);
     if(el) el.className = (v === currentUser) ? 'btn small' : 'btn ghost small';
   });
