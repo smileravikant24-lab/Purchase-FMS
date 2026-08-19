@@ -166,12 +166,13 @@
 
 <script>
 const STEPS = [
-  {key:'PO1', label:'Order placed', hours:0, doerName:'Mr. Sandeep Dhawan', doerEmail:'satijapaper@gmail.com', docs:[]},
-  {key:'PO2', label:'Mill confirms', hours:24, doerName:'Mr. Sandeep Dhawan', doerEmail:'satijapaper@gmail.com', docs:['Confirmation PDF']},
-  {key:'PO3', label:'Dispatch + invoice', hours:48, doerName:'Mr. Sandeep Dhawan', doerEmail:'satijapaper@gmail.com', docs:['Packing List','Invoice PDF']},
-  {key:'PO4', label:'Driver follow-up', hours:72, doerName:'Mr. Sandeep Dhawan', doerEmail:'satijapaper@gmail.com', docs:[]},
-  {key:'PO5', label:'Warehouse delivery', hours:96, doerName:'Ms. Pooja', doerEmail:'poojasatijapaper@gmail.com', docs:['Godown Slip','GR Signed Copy']},
-  {key:'PO6', label:'Transporter + GR', hours:120, doerName:'Ms. Pooja', doerEmail:'poojasatijapaper@gmail.com', docs:['E-Way Bill','GR Copy']},
+  {key:'PO1', label:'Order placed', hours:0, doerName:'Mr. Sandeep Dhawan', doerEmails:['satijapaper@gmail.com'], docs:[]},
+  {key:'PO2', label:'Mill confirms', hours:24, doerName:'Mr. Sandeep Dhawan', doerEmails:['satijapaper@gmail.com'], docs:['Confirmation PDF']},
+  {key:'PO3', label:'Dispatch + invoice', hours:48, doerName:'Mr. Sandeep Dhawan', doerEmails:['satijapaper@gmail.com'], docs:['Packing List','Invoice PDF']},
+  {key:'PO4', label:'Driver follow-up', hours:72, doerName:'Mr. Sandeep Dhawan', doerEmails:['satijapaper@gmail.com'], docs:[]},
+  // Pooja's steps are also visible/actionable by Sandeep, so he can cover them when needed.
+  {key:'PO5', label:'Warehouse delivery', hours:96, doerName:'Ms. Pooja / Mr. Sandeep Dhawan', doerEmails:['poojasatijapaper@gmail.com','satijapaper@gmail.com'], docs:['Godown Slip','GR Signed Copy']},
+  {key:'PO6', label:'Transporter + GR', hours:120, doerName:'Ms. Pooja / Mr. Sandeep Dhawan', doerEmails:['poojasatijapaper@gmail.com','satijapaper@gmail.com'], docs:['E-Way Bill','GR Copy']},
 ];
 // Docs that cannot be skipped with a confirm dialog - the step simply won't
 // complete without them.
@@ -493,7 +494,7 @@ function visibleOrders(){
   const done = base.filter(o => currentStepIndex(o) >= STEPS.length);
   const notDone = base.filter(o => currentStepIndex(o) < STEPS.length);
   if(currentUser === 'all') return adminTab === 'completed' ? done : notDone;
-  return notDone.filter(o => STEPS[currentStepIndex(o)].doerEmail === currentUser);
+  return notDone.filter(o => STEPS[currentStepIndex(o)].doerEmails.includes(currentUser));
 }
 
 function setAdminTab(tab){
@@ -634,7 +635,7 @@ function renderPanel(){
     return;
   }
   if(currentUser !== 'all'){
-    const myStepKeys = STEPS.filter(s => s.doerEmail === currentUser).map(s => s.key);
+    const myStepKeys = STEPS.filter(s => s.doerEmails.includes(currentUser)).map(s => s.key);
     let html = '';
     let anyWork = false;
     myStepKeys.forEach(stepKey => {
