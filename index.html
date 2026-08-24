@@ -442,14 +442,21 @@ function delayText(st){
 function orderValue(o){
   return o.items.reduce((s,i)=> s + i.orderQty * i.rate, 0);
 }
+function isTransferNA(o, key){
+  return (key === 'PO4' || key === 'PO5' || key === 'PO6')
+    && o.steps.PO3 && o.steps.PO3.transferStatus === 'Yes';
+}
+function stepIsDone(o, key){
+  return o.steps[key].status === 'done' || isTransferNA(o, key);
+}
 function currentStepIndex(o){
-  for(let i=0;i<STEPS.length;i++){ if(o.steps[STEPS[i].key].status !== 'done') return i; }
+  for(let i=0;i<STEPS.length;i++){ if(!stepIsDone(o, STEPS[i].key)) return i; }
   return STEPS.length;
 }
 function isStepOverdue(o, idx){
   if(idx >= STEPS.length) return false;
   const st = o.steps[STEPS[idx].key];
-  if(st.status === 'done') return false;
+  if(stepIsDone(o, STEPS[idx].key)) return false;
   return Date.now() > st.planned;
 }
 function orderHasMismatch(o){
@@ -657,7 +664,7 @@ function renderPanel(){
     const isOpen = !!expanded[o.id];
     const stamps = STEPS.map((s,i) => {
       let cls = 'tick';
-      if(o.steps[s.key].status === 'done') cls += ' done';
+      if(stepIsDone(o, s.key)) cls += ' done';
       else if(i === idx && overdue) cls += ' overdue';
       return `<div class="${cls}" title="${s.label}"></div>`;
     }).join('');
@@ -728,14 +735,17 @@ function renderDetail(o){
   let currentPanelHtml = '';
   STEPS.forEach((s,i) => {
     const st = o.steps[s.key];
-    const overdue = st.status !== 'done' && Date.now() > st.planned;
+    const naSkip = isTransferNA(o, s.key) && st.status !== 'done';
+    const overdue = !stepIsDone(o, s.key) && Date.now() > st.planned;
     let cls = 'step-card';
-    if(st.status === 'done') cls += ' done';
+    if(stepIsDone(o, s.key)) cls += ' done';
     else if(i === idx) cls += ' current';
     const plannedLine = `<div class="time">Planned: ${fmtDate(st.planned)}</div>`;
     const doneLine = (st.status === 'done'
       ? `<div class="time">Done: ${fmtDate(st.actual)}</div>`
-      : `<div class="time ${overdue?'late':''}">Done: &mdash;${overdue?' (overdue)':''}</div>`) + delayText(st);
+      : naSkip
+        ? `<div class="time">Not applicable &mdash; transferred to other party</div>`
+        : `<div class="time ${overdue?'late':''}">Done: &mdash;${overdue?' (overdue)':''}</div>`) + delayText(st);
     let extraFieldsHtml = '';
     if(s.key === 'PO3'){
       const hasVal = v => v !== undefined && v !== null && v !== '';
@@ -755,7 +765,7 @@ function renderDetail(o){
       if(rows.length) extraFieldsHtml = `<div class="ts" style="margin-top:4px; line-height:1.6;">${rows.map(([k,v])=>`${k}: ${v}`).join('<br>')}</div>`;
     }
     let actionHtml = '';
-    if(i === idx && st.status !== 'done'){
+    if(i === idx && !stepIsDone(o, s.key)){
       actionHtml = `<div class="ts" style="margin-top:6px; color:var(--warn); font-weight:600;">Confirm details below &#8595;</div>`;
       const docInputs = s.docs.map(d => {
         const safe = d.replace(/\s+/g,'_');
