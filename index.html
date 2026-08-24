@@ -408,8 +408,10 @@ async function dedupeOrders(){
 async function saveOrder(o){
   try{
     await backendSaveOrder(o);
+    return true;
   }catch(e){
     console.error('save failed', e);
+    return false;
   }
 }
 
@@ -745,7 +747,7 @@ function renderDetail(o){
       ? `<div class="time">Done: ${fmtDate(st.actual)}</div>`
       : naSkip
         ? `<div class="time">Not applicable &mdash; transferred to other party</div>`
-        : `<div class="time ${overdue?'late':''}">Done: &mdash;${overdue?' (overdue)':''}</div>`) + delayText(st);
+        : `<div class="time ${overdue?'late':''}">Done: &mdash;${overdue?' (overdue)':''}</div>`) + (naSkip ? '' : delayText(st));
     let extraFieldsHtml = '';
     if(s.key === 'PO3'){
       const hasVal = v => v !== undefined && v !== null && v !== '';
@@ -905,13 +907,19 @@ async function doCompleteStep(orderId, stepKey){
   }
 
   const docsFlag = {};
+  const failedUploads = [];
   for(const d of Object.keys(uploaded)){
     try{
       const result = await backendUploadDoc(orderId, stepKey, d, uploaded[d].name, uploaded[d].dataUrl.split(';')[0].split(':')[1], uploaded[d].dataUrl);
       docsFlag[d] = { name: uploaded[d].name, url: result.url || null };
     }catch(e){
       console.error('doc save failed', e);
+      failedUploads.push(d);
     }
+  }
+  if(failedUploads.length){
+    alert(`Could not upload: ${failedUploads.join(', ')}. Please check your connection and try again before marking this step done.`);
+    return;
   }
 
   o.steps[stepKey].status = 'done';
@@ -930,7 +938,11 @@ async function doCompleteStep(orderId, stepKey){
     });
   }
 
-  await saveOrder(o);
+  const saved = await saveOrder(o);
+  if(!saved){
+    alert(`"${stepDef.label}" could not be saved to the server. Please check your connection and click "Mark done" again to retry.`);
+    return;
+  }
   render();
 }
 
