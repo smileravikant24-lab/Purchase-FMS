@@ -125,7 +125,7 @@
       <img src="logo.png" alt="Satija Paper logo" style="height:48px; width:48px; object-fit:contain;">
       <div>
         <h1>Purchase order tracker</h1>
-        <div class="sub" style="margin-top:2px;">Build: 2026-07-26-v3</div>
+        <div class="sub" style="margin-top:2px;">Build: 2026-08-28-v4</div>
       </div>
     </div>
     <div style="display:flex; gap:8px; align-items:center;">
@@ -504,31 +504,80 @@ function setAdminTab(tab){
   render();
 }
 
-// Background auto-sync calls render() every few minutes. Without this,
-// re-rendering the panel wipes out whatever a user has typed into an
-// in-progress step's confirm form (e.g. PO3 vehicle/invoice/driver details)
-// before they hit "Mark done" - so capture and reapply those values around
-// every render.
-function captureUnsavedInputs(){
-  const state = {};
-  document.querySelectorAll('#panel input[id^="fld-"], #panel input[id^="inv-"], #panel select[id^="fld-"]').forEach(el => {
-    if(el.value !== '') state[el.id] = el.value;
-  });
-  return state;
+// Background auto-sync re-renders the panel every few minutes, which throws
+// away whatever is typed into an in-progress step's confirm form (PO3 vehicle
+// /invoice details, PO4 driver status) before "Mark done" is pressed - those
+// values live only in the DOM until then. So every edit is recorded here as a
+// draft, keyed by field id, and reapplied after each render. Drafts also
+// survive a reload/crash via localStorage, and are dropped once the step is
+// actually saved.
+const DRAFT_KEY = 'poDrafts';
+let draftValues = {};
+try{
+  const saved = localStorage.getItem(DRAFT_KEY);
+  if(saved) draftValues = JSON.parse(saved) || {};
+}catch(e){ draftValues = {}; }
+
+function persistDrafts(){
+  try{ localStorage.setItem(DRAFT_KEY, JSON.stringify(draftValues)); }catch(e){}
 }
-function restoreUnsavedInputs(state){
-  Object.keys(state).forEach(id => {
+function noteDraft(el){
+  if(!el || !el.id) return;
+  draftValues[el.id] = el.value;
+  persistDrafts();
+}
+// Called once a step is saved - its boxes are gone, so their drafts must go
+// too, or they'd reappear the next time that order shows a confirm form.
+function clearDrafts(orderId, stepKey){
+  const fieldPrefix = `fld-${orderId}-${stepKey}-`;
+  const qtyPrefix = `inv-${orderId}-`;
+  Object.keys(draftValues).forEach(id => {
+    if(id.startsWith(fieldPrefix) || (stepKey === 'PO3' && id.startsWith(qtyPrefix))) delete draftValues[id];
+  });
+  persistDrafts();
+}
+function applyDrafts(){
+  Object.keys(draftValues).forEach(id => {
     const el = document.getElementById(id);
-    if(el && el.value === '') el.value = state[id];
+    if(el) el.value = draftValues[id];
   });
 }
 
-function render(){
+// A file picked for upload is held in pendingDocs (which survives a render),
+// but the file input and its "done" tick are rebuilt empty - repaint them so
+// an already-picked file doesn't look lost.
+function restoreDocStatuses(){
+  Object.keys(pendingDocs).forEach(orderId => {
+    Object.keys(pendingDocs[orderId] || {}).forEach(stepKey => {
+      Object.keys(pendingDocs[orderId][stepKey] || {}).forEach(docLabel => {
+        const safe = docLabel.replace(/\s+/g,'_');
+        const el = document.getElementById(`docstat-${orderId}-${stepKey}-${safe}`);
+        if(el) el.textContent = `✓ ${pendingDocs[orderId][stepKey][docLabel].name}`;
+      });
+    });
+  });
+}
+
+// True while the cursor sits in a confirm-form box. Rebuilding the panel then
+// would drop focus mid-word, so background renders wait instead.
+function isUserEditing(){
+  const panel = document.getElementById('panel');
+  const el = document.activeElement;
+  if(!panel || !el || !panel.contains(el)) return false;
+  return el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA';
+}
+
+let renderPending = false;
+// force: the user asked for this (expanded a row, saved a step) - render even
+// if a box has focus. Background syncs leave force unset and get deferred.
+function render(force){
   if(!signedIn) return;
-  const unsaved = captureUnsavedInputs();
+  if(!force && isUserEditing()){ renderPending = true; return; }
+  renderPending = false;
   renderStats();
   renderPanel();
-  restoreUnsavedInputs(unsaved);
+  applyDrafts();
+  restoreDocStatuses();
 }
 
 function renderStats(){
@@ -553,7 +602,7 @@ function po3ConfirmSection(o){
   const invRows = o.items.map(it => `
       <div class="inv-row">
         <span style="flex:1;">${it.product}<span class="field-hint">Order qty: ${it.orderQty} ${it.unit}</span></span>
-        <input type="number" id="inv-${o.id}-${it.id}" value="${it.orderQty}" step="0.01">
+        <input type="number" id="inv-${o.id}-${it.id}" value="${it.orderQty}" step="0.01" oninput="noteDraft(this)">
       </div>`).join('');
 
   const hasVal = v => v !== undefined && v !== null && v !== '';
@@ -570,9 +619,9 @@ function po3ConfirmSection(o){
       const hint = src && hasVal(o[src]) ? `<span class="field-hint">From Purchase Form: ${isMoney(field) ? fmtMoney(o[src]) : o[src]}</span>` : '';
       if(type === 'select'){
         const options = extra.map(opt => `<option value="${opt}">${opt}</option>`).join('');
-        return `<div class="field"><label>${label}</label><select id="fld-${o.id}-PO3-${field}"><option value=""></option>${options}</select>${hint}</div>`;
+        return `<div class="field"><label>${label}</label><select id="fld-${o.id}-PO3-${field}" onchange="noteDraft(this)"><option value=""></option>${options}</select>${hint}</div>`;
       }
-      return `<div class="field"><label>${label}</label><input type="${type||'text'}" id="fld-${o.id}-PO3-${field}" value="${prefill}" ${extra||''}>${hint}</div>`;
+      return `<div class="field"><label>${label}</label><input type="${type||'text'}" id="fld-${o.id}-PO3-${field}" value="${prefill}" ${extra||''} oninput="noteDraft(this)">${hint}</div>`;
     }).join('');
     return `<div class="confirm-group">${title}</div><div class="field-grid">${inputs}</div>`;
   };
@@ -602,7 +651,7 @@ function renderTaskCard(o){
     </div>`;
   }).join('');
   const po3Section = s.key === 'PO3' ? po3ConfirmSection(o) : '';
-  const po4Fields = s.key === 'PO4' ? `<div class="doc-row"><span>Driver status</span><input type="text" id="fld-${o.id}-PO4-driverStatus"></div>` : '';
+  const po4Fields = s.key === 'PO4' ? `<div class="doc-row"><span>Driver status</span><input type="text" id="fld-${o.id}-PO4-driverStatus" oninput="noteDraft(this)"></div>` : '';
 
   return `<div class="task-card ${overdue?'overdue':''}">
     <div class="task-head">
@@ -766,7 +815,7 @@ function renderDetail(o){
         </div>`;
       }).join('');
       const po3Section = s.key === 'PO3' ? po3ConfirmSection(o) : '';
-      const po4Fields = s.key === 'PO4' ? `<div class="doc-row"><span>Driver status</span><input type="text" id="fld-${o.id}-PO4-driverStatus"></div>` : '';
+      const po4Fields = s.key === 'PO4' ? `<div class="doc-row"><span>Driver status</span><input type="text" id="fld-${o.id}-PO4-driverStatus" oninput="noteDraft(this)"></div>` : '';
       currentPanelHtml = `<div style="margin-top:14px; padding:14px 16px; border:1px solid var(--border); border-radius:10px; background:var(--surface);">
           <h4 style="margin:0 0 4px;">${s.key} &middot; ${s.label} &mdash; confirm</h4>
           ${po3Section}${po4Fields}${docInputs}
@@ -829,7 +878,7 @@ async function viewDoc(orderId, stepKey, docLabel){
 
 function toggleExpand(id){
   expanded[id] = !expanded[id];
-  render();
+  render(true);
 }
 
 async function completeStep(orderId, stepKey){
@@ -921,10 +970,18 @@ async function doCompleteStep(orderId, stepKey){
   }
 
   await saveOrder(o);
-  render();
+  clearDrafts(orderId, stepKey);
+  render(true);
 }
 
 
+
+// A background sync that arrived while a box had focus left the panel
+// waiting to be redrawn - do it once the cursor leaves the form for good
+// (moving between boxes keeps isUserEditing() true, so it stays put).
+document.addEventListener('focusout', () => {
+  setTimeout(() => { if(renderPending && !isUserEditing()) render(); }, 0);
+});
 
 document.getElementById('panel').innerHTML = '<div class="empty"><div class="big">Please sign in first</div>Your data will appear after signing in with the Google button above.</div>';
 window.addEventListener('load', initGoogleSignIn);
