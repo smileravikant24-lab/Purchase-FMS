@@ -125,7 +125,7 @@
       <img src="logo.png" alt="Satija Paper logo" style="height:48px; width:48px; object-fit:contain;">
       <div>
         <h1>Purchase order tracker</h1>
-        <div class="sub" style="margin-top:2px;">Build: 2026-08-28-v4</div>
+        <div class="sub" style="margin-top:2px;">Build: 2026-09-08-v5</div>
       </div>
     </div>
     <div style="display:flex; gap:8px; align-items:center;">
@@ -443,13 +443,16 @@ function orderValue(o){
   return o.items.reduce((s,i)=> s + i.orderQty * i.rate, 0);
 }
 function currentStepIndex(o){
-  for(let i=0;i<STEPS.length;i++){ if(o.steps[STEPS[i].key].status !== 'done') return i; }
+  for(let i=0;i<STEPS.length;i++){
+    const s = o.steps[STEPS[i].key].status;
+    if(s !== 'done' && s !== 'skipped') return i;
+  }
   return STEPS.length;
 }
 function isStepOverdue(o, idx){
   if(idx >= STEPS.length) return false;
   const st = o.steps[STEPS[idx].key];
-  if(st.status === 'done') return false;
+  if(st.status === 'done' || st.status === 'skipped') return false;
   return Date.now() > st.planned;
 }
 function orderHasMismatch(o){
@@ -706,7 +709,9 @@ function renderPanel(){
     const isOpen = !!expanded[o.id];
     const stamps = STEPS.map((s,i) => {
       let cls = 'tick';
-      if(o.steps[s.key].status === 'done') cls += ' done';
+      const ss = o.steps[s.key].status;
+      if(ss === 'done') cls += ' done';
+      else if(ss === 'skipped') cls += ' done';
       else if(i === idx && overdue) cls += ' overdue';
       return `<div class="${cls}" title="${s.label}"></div>`;
     }).join('');
@@ -777,16 +782,19 @@ function renderDetail(o){
   let currentPanelHtml = '';
   STEPS.forEach((s,i) => {
     const st = o.steps[s.key];
-    const overdue = st.status !== 'done' && Date.now() > st.planned;
+    const skipped = st.status === 'skipped';
+    const overdue = st.status !== 'done' && !skipped && Date.now() > st.planned;
     let cls = 'step-card';
-    if(st.status === 'done') cls += ' done';
+    if(st.status === 'done' || skipped) cls += ' done';
     else if(i === idx) cls += ' current';
-    const plannedLine = `<div class="time">Planned: ${fmtDate(st.planned)}</div>`;
-    const doneLine = (st.status === 'done'
-      ? `<div class="time">Done: ${fmtDate(st.actual)}</div>`
-      : `<div class="time ${overdue?'late':''}">Done: &mdash;${overdue?' (overdue)':''}</div>`) + delayText(st);
+    const plannedLine = skipped ? '' : `<div class="time">Planned: ${fmtDate(st.planned)}</div>`;
+    const doneLine = skipped
+      ? `<div class="ts" style="color:var(--ink-faint); margin-top:4px;">Not applicable &mdash; transferred to other party</div>`
+      : (st.status === 'done'
+        ? `<div class="time">Done: ${fmtDate(st.actual)}</div>`
+        : `<div class="time ${overdue?'late':''}">Done: &mdash;${overdue?' (overdue)':''}</div>`) + delayText(st);
     let extraFieldsHtml = '';
-    if(s.key === 'PO3'){
+    if(!skipped && s.key === 'PO3'){
       const hasVal = v => v !== undefined && v !== null && v !== '';
       const costLine = (confirmed, quoted) => {
         if(!hasVal(confirmed)) return '';
@@ -804,7 +812,7 @@ function renderDetail(o){
       if(rows.length) extraFieldsHtml = `<div class="ts" style="margin-top:4px; line-height:1.6;">${rows.map(([k,v])=>`${k}: ${v}`).join('<br>')}</div>`;
     }
     let actionHtml = '';
-    if(i === idx && st.status !== 'done'){
+    if(!skipped && i === idx && st.status !== 'done'){
       actionHtml = `<div class="ts" style="margin-top:6px; color:var(--warn); font-weight:600;">Confirm details below &#8595;</div>`;
       const docInputs = s.docs.map(d => {
         const safe = d.replace(/\s+/g,'_');
@@ -821,7 +829,7 @@ function renderDetail(o){
           ${po3Section}${po4Fields}${docInputs}
           <button class="btn small" id="markdone-${o.id}-${s.key}" style="margin-top:10px;" onclick="completeStep('${o.id}','${s.key}')">Mark done</button>
         </div>`;
-    } else if(st.status === 'done' && s.docs.length){
+    } else if(!skipped && st.status === 'done' && s.docs.length){
       const chips = s.docs.map(d => {
         const has = st.docs && st.docs[d];
         return has ? `<a href="#" onclick="viewDoc('${o.id}','${s.key}','${d}');return false;" class="doc-chip">${d} &#8599;</a>` : `<span class="doc-chip" style="opacity:.5;">${d} missing</span>`;
@@ -959,13 +967,12 @@ async function doCompleteStep(orderId, stepKey){
   if(pendingDocs[orderId]) delete pendingDocs[orderId][stepKey];
 
   // A dropped transfer (Transfer status = Yes) means the order never goes
-  // through warehouse delivery/transporter follow-up - close out every
-  // remaining step so it doesn't sit around looking pending.
+  // through warehouse delivery/transporter follow-up - mark remaining steps
+  // as skipped so they display as "Not applicable" without a completion timestamp.
   if(stepKey === 'PO3' && o.steps.PO3.transferStatus === 'Yes'){
     const idx = STEPS.findIndex(s => s.key === 'PO3');
     STEPS.slice(idx + 1).forEach(s => {
-      o.steps[s.key].status = 'done';
-      o.steps[s.key].actual = Date.now();
+      o.steps[s.key].status = 'skipped';
     });
   }
 
