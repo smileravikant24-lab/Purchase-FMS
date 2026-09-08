@@ -173,6 +173,7 @@ function syncStatusFromOldFMS() {
   const rows = data.slice(6).filter(r => r[OLD_FMS_COLS.po]);
 
   const realStepsByPo = {};
+  const transferByPo = {};
   rows.forEach(r => {
     const po = String(r[OLD_FMS_COLS.po]).trim();
     if (!po) return;
@@ -192,7 +193,12 @@ function syncStatusFromOldFMS() {
         }
       }
     });
+    // Check if this PO was transferred to another party in old FMS
+    const ts = String(r[OLD_FMS_COLS.transferStatus] || '').trim().toLowerCase();
+    if (ts === 'yes') transferByPo[po] = true;
   });
+
+  const TRANSFER_SKIPPED_STEPS = ['PO4', 'PO5', 'PO6'];
 
   const orders = getOrders();
   let updated = 0;
@@ -200,16 +206,31 @@ function syncStatusFromOldFMS() {
     const real = realStepsByPo[String(o.id).trim()];
     if (!real) return;
     let changed = false;
+
+    // Sync completed steps from old FMS (never regress done or skipped steps)
     Object.keys(real).forEach(key => {
-      if (o.steps[key] && o.steps[key].status !== 'done') {
+      const cur = o.steps[key];
+      if (cur && cur.status !== 'done' && cur.status !== 'skipped') {
         o.steps[key] = {
           status: 'done',
-          planned: real[key].planned || o.steps[key].planned,
+          planned: real[key].planned || cur.planned,
           actual: real[key].actual
         };
         changed = true;
       }
     });
+
+    // If PO3 is done and old FMS shows transferStatus=Yes, mark PO4-6 as skipped
+    // (not done — they were never actually performed).
+    if (transferByPo[String(o.id).trim()] && o.steps.PO3 && o.steps.PO3.status === 'done') {
+      TRANSFER_SKIPPED_STEPS.forEach(key => {
+        if (o.steps[key] && o.steps[key].status !== 'done' && o.steps[key].status !== 'skipped') {
+          o.steps[key].status = 'skipped';
+          changed = true;
+        }
+      });
+    }
+
     if (changed) {
       saveOrder(o);
       updated++;
