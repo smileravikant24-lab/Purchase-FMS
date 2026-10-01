@@ -823,7 +823,6 @@ function renderDetail(o){
         return `<div class="doc-row">
           <span>${d}</span>
           <input type="file" multiple id="doc-${o.id}-${s.key}-${safe}" onchange="handleFileSelect(event,'${o.id}','${s.key}','${d}')">
-          <span class="ts" id="docstat-${o.id}-${s.key}-${safe}" style="min-width:80px;">(max 5)</span>
         </div>`;
       }).join('');
       const po3Section = s.key === 'PO3' ? po3ConfirmSection(o) : '';
