@@ -561,8 +561,7 @@ function restoreDocStatuses(){
       Object.keys(pendingDocs[orderId][stepKey] || {}).forEach(docLabel => {
         const safe = docLabel.replace(/\s+/g,'_');
         const el = document.getElementById(`docstat-${orderId}-${stepKey}-${safe}`);
-        const picked = [].concat(pendingDocs[orderId][stepKey][docLabel]);
-        if(el) el.textContent = `✓ ${picked.map(f => f.name).join(', ')}`;
+        if(el) showDocStatus(orderId, stepKey, docLabel);
       });
     });
   });
@@ -873,12 +872,33 @@ function handleFileSelect(evt, orderId, stepKey, docLabel){
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+  pendingDocs[orderId] = pendingDocs[orderId] || {};
+  pendingDocs[orderId][stepKey] = pendingDocs[orderId][stepKey] || {};
+  const existing = [].concat(pendingDocs[orderId][stepKey][docLabel] || []);
+  if(existing.length + files.length > MAX_FILES_PER_DOC){
+    alert(`Max ${MAX_FILES_PER_DOC} files allowed for ${docLabel}. Already selected: ${existing.length}.`);
+    evt.target.value = '';
+    return;
+  }
   Promise.all(files.map(readOne)).then(list => {
-    pendingDocs[orderId] = pendingDocs[orderId] || {};
-    pendingDocs[orderId][stepKey] = pendingDocs[orderId][stepKey] || {};
-    pendingDocs[orderId][stepKey][docLabel] = list;
-    if(statusEl) statusEl.textContent = `\u2713 ${list.map(f => f.name).join(', ')}`;
+    pendingDocs[orderId][stepKey][docLabel] = existing.concat(list);
+    evt.target.value = '';
+    showDocStatus(orderId, stepKey, docLabel);
   }).catch(() => { if(statusEl) statusEl.textContent = 'Upload failed'; });
+}
+
+// Shows picked files (count / max) with a clear link, so more files can be added one by one.
+function showDocStatus(orderId, stepKey, docLabel){
+  const safe = docLabel.replace(/\s+/g,'_');
+  const el = document.getElementById(`docstat-${orderId}-${stepKey}-${safe}`);
+  if(!el) return;
+  const list = [].concat((pendingDocs[orderId] && pendingDocs[orderId][stepKey] && pendingDocs[orderId][stepKey][docLabel]) || []);
+  if(!list.length){ el.textContent = `(max ${MAX_FILES_PER_DOC})`; return; }
+  el.innerHTML = `\u2713 ${list.length}/${MAX_FILES_PER_DOC}: ${list.map(f => f.name).join(', ')} <a href="#" onclick="clearPickedDocs('${orderId}','${stepKey}','${docLabel}');return false;">clear</a>`;
+}
+function clearPickedDocs(orderId, stepKey, docLabel){
+  if(pendingDocs[orderId] && pendingDocs[orderId][stepKey]) delete pendingDocs[orderId][stepKey][docLabel];
+  showDocStatus(orderId, stepKey, docLabel);
 }
 
 async function viewDoc(orderId, stepKey, docLabel, fileIndex){
