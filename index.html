@@ -272,11 +272,11 @@ async function backendSaveOrder(order){
   return window.storage.set('po:' + order.id, JSON.stringify(order), false);
 }
 
-async function backendUploadDoc(orderId, stepKey, docLabel, fileName, mimeType, base64){
+async function backendUploadDoc(orderId, stepKey, docLabel, fileName, mimeType, base64, fileIndex){
   if(APPS_SCRIPT_URL){
     return apiCall({action:'uploadDoc', orderId, stepKey, docLabel, fileName, mimeType, base64});
   }
-  const key = `doc:${orderId}:${stepKey}:${docLabel}`;
+  const key = `doc:${orderId}:${stepKey}:${docLabel}` + (fileIndex ? `:${fileIndex}` : '');
   await window.storage.set(key, base64, false);
   return { url: null, storedLocally: true };
 }
@@ -561,7 +561,8 @@ function restoreDocStatuses(){
       Object.keys(pendingDocs[orderId][stepKey] || {}).forEach(docLabel => {
         const safe = docLabel.replace(/\s+/g,'_');
         const el = document.getElementById(`docstat-${orderId}-${stepKey}-${safe}`);
-        if(el) el.textContent = `✓ ${pendingDocs[orderId][stepKey][docLabel].name}`;
+        const picked = [].concat(pendingDocs[orderId][stepKey][docLabel]);
+        if(el) el.textContent = `✓ ${picked.map(f => f.name).join(', ')}`;
       });
     });
   });
@@ -655,8 +656,8 @@ function renderTaskCard(o){
     const safe = d.replace(/\s+/g,'_');
     return `<div class="doc-row">
       <span>${d}</span>
-      <input type="file" id="doc-${o.id}-${s.key}-${safe}" onchange="handleFileSelect(event,'${o.id}','${s.key}','${d}')">
-      <span class="ts" id="docstat-${o.id}-${s.key}-${safe}" style="min-width:80px;"></span>
+      <input type="file" multiple id="doc-${o.id}-${s.key}-${safe}" onchange="handleFileSelect(event,'${o.id}','${s.key}','${d}')">
+      <span class="ts" id="docstat-${o.id}-${s.key}-${safe}" style="min-width:80px;">(max 5)</span>
     </div>`;
   }).join('');
   const po3Section = s.key === 'PO3' ? po3ConfirmSection(o) : '';
@@ -822,8 +823,8 @@ function renderDetail(o){
         const safe = d.replace(/\s+/g,'_');
         return `<div class="doc-row">
           <span>${d}</span>
-          <input type="file" id="doc-${o.id}-${s.key}-${safe}" onchange="handleFileSelect(event,'${o.id}','${s.key}','${d}')">
-          <span class="ts" id="docstat-${o.id}-${s.key}-${safe}" style="min-width:80px;"></span>
+          <input type="file" multiple id="doc-${o.id}-${s.key}-${safe}" onchange="handleFileSelect(event,'${o.id}','${s.key}','${d}')">
+          <span class="ts" id="docstat-${o.id}-${s.key}-${safe}" style="min-width:80px;">(max 5)</span>
         </div>`;
       }).join('');
       const po3Section = s.key === 'PO3' ? po3ConfirmSection(o) : '';
@@ -836,7 +837,9 @@ function renderDetail(o){
     } else if(!naSkip && st.status === 'done' && s.docs.length){
       const chips = s.docs.map(d => {
         const has = st.docs && st.docs[d];
-        return has ? `<a href="#" onclick="viewDoc('${o.id}','${s.key}','${d}');return false;" class="doc-chip">${d} &#8599;</a>` : `<span class="doc-chip" style="opacity:.5;">${d} missing</span>`;
+        if(!has) return `<span class="doc-chip" style="opacity:.5;">${d} missing</span>`;
+        const files = (has.files && has.files.length) ? has.files : [has];
+        return files.map((f, fi) => `<a href="#" onclick="viewDoc('${o.id}','${s.key}','${d}',${fi});return false;" class="doc-chip">${d}${files.length > 1 ? ' ' + (fi + 1) : ''} &#8599;</a>`).join('');
       }).join('');
       actionHtml = `<div style="margin-top:6px;">${chips}</div>`;
     }
@@ -847,36 +850,48 @@ function renderDetail(o){
   return `${legacyNote}${orderInfoHtml}<h4>Items</h4>${itemsHtml}<h4>Steps</h4>${stepsHtml}${currentPanelHtml}`;
 }
 
+const MAX_FILES_PER_DOC = 5;
 function handleFileSelect(evt, orderId, stepKey, docLabel){
-  const file = evt.target.files[0];
+  const files = Array.from(evt.target.files || []);
   const safe = docLabel.replace(/\s+/g,'_');
   const statusEl = document.getElementById(`docstat-${orderId}-${stepKey}-${safe}`);
-  if(!file) return;
-  if(file.size > 4 * 1024 * 1024){
-    if(statusEl) statusEl.textContent = 'File too large (max 4MB)';
+  if(!files.length) return;
+  if(files.length > MAX_FILES_PER_DOC){
+    if(statusEl) statusEl.textContent = `Max ${MAX_FILES_PER_DOC} files allowed`;
     evt.target.value = '';
     return;
   }
-  const reader = new FileReader();
-  reader.onload = () => {
+  const big = files.find(f => f.size > 4 * 1024 * 1024);
+  if(big){
+    if(statusEl) statusEl.textContent = `File too large (max 4MB): ${big.name}`;
+    evt.target.value = '';
+    return;
+  }
+  const readOne = file => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve({dataUrl: reader.result, name: file.name});
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  Promise.all(files.map(readOne)).then(list => {
     pendingDocs[orderId] = pendingDocs[orderId] || {};
     pendingDocs[orderId][stepKey] = pendingDocs[orderId][stepKey] || {};
-    pendingDocs[orderId][stepKey][docLabel] = {dataUrl: reader.result, name: file.name};
-    if(statusEl) statusEl.textContent = `\u2713 ${file.name}`;
-  };
-  reader.onerror = () => { if(statusEl) statusEl.textContent = 'Upload failed'; };
-  reader.readAsDataURL(file);
+    pendingDocs[orderId][stepKey][docLabel] = list;
+    if(statusEl) statusEl.textContent = `\u2713 ${list.map(f => f.name).join(', ')}`;
+  }).catch(() => { if(statusEl) statusEl.textContent = 'Upload failed'; });
 }
 
-async function viewDoc(orderId, stepKey, docLabel){
+async function viewDoc(orderId, stepKey, docLabel, fileIndex){
+  fileIndex = fileIndex || 0;
   const o = orders.find(x => x.id === orderId);
-  const docInfo = o && o.steps[stepKey].docs && o.steps[stepKey].docs[docLabel];
+  const docEntry = o && o.steps[stepKey].docs && o.steps[stepKey].docs[docLabel];
+  const docInfo = docEntry && ((docEntry.files && docEntry.files[fileIndex]) || docEntry);
   if(docInfo && docInfo.url){
     window.open(docInfo.url, '_blank');
     return;
   }
   try{
-    const key = `doc:${orderId}:${stepKey}:${docLabel}`;
+    const key = `doc:${orderId}:${stepKey}:${docLabel}` + (fileIndex ? `:${fileIndex}` : '');
     const r = await window.storage.get(key, false);
     if(!r){ alert('Document not found'); return; }
     const res = await fetch(r.value);
@@ -958,13 +973,19 @@ async function doCompleteStep(orderId, stepKey){
   const docsFlag = {};
   const failedUploads = [];
   for(const d of Object.keys(uploaded)){
-    try{
-      const result = await backendUploadDoc(orderId, stepKey, d, uploaded[d].name, uploaded[d].dataUrl.split(';')[0].split(':')[1], uploaded[d].dataUrl);
-      docsFlag[d] = { name: uploaded[d].name, url: result.url || null };
-    }catch(e){
-      console.error('doc save failed', e);
-      failedUploads.push(d);
+    const list = [].concat(uploaded[d]);
+    const saved = [];
+    for(let fi = 0; fi < list.length; fi++){
+      const f = list[fi];
+      try{
+        const result = await backendUploadDoc(orderId, stepKey, d, f.name, f.dataUrl.split(';')[0].split(':')[1], f.dataUrl, fi);
+        saved.push({ name: f.name, url: result.url || null });
+      }catch(e){
+        console.error('doc save failed', e);
+        failedUploads.push(`${d} (${f.name})`);
+      }
     }
+    if(saved.length) docsFlag[d] = { name: saved[0].name, url: saved[0].url, files: saved };
   }
   if(failedUploads.length){
     alert(`Could not upload: ${failedUploads.join(', ')}. Please check your connection and try again before marking this step done.`);
