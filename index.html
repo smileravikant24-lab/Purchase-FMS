@@ -125,7 +125,7 @@
       <img src="logo.png" alt="Satija Paper logo" style="height:48px; width:48px; object-fit:contain;">
       <div>
         <h1>Purchase order tracker</h1>
-        <div class="sub" style="margin-top:2px;">Build: 2026-10-06-v9</div>
+        <div class="sub" style="margin-top:2px;">Build: 2026-10-06-v10</div>
       </div>
     </div>
     <div style="display:flex; gap:8px; align-items:center;">
@@ -244,7 +244,26 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxERIcFjijQaky9
 // Reads the reply as text first so that when Apps Script sends back an HTML
 // error page (script crash, timeout, quota) the real reason is shown instead
 // of a bare JSON parse error.
+// Google sometimes answers a web-app call with a 404 "Page not found" page
+// even though the script ran fine - it is intermittent (the same call works
+// on the next try). So every call except file uploads is retried a few
+// times before giving up. All retried actions are safe to repeat: they
+// update by PO number or only add what is missing.
 async function apiCall(payload){
+  const attempts = payload.action === 'uploadDoc' ? 1 : 4;
+  let lastErr;
+  for(let i = 0; i < attempts; i++){
+    try{
+      return await apiCallOnce(payload);
+    }catch(e){
+      lastErr = e;
+      if(i < attempts - 1) await new Promise(r => setTimeout(r, 1500 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
+async function apiCallOnce(payload){
   // The action and other short fields also travel in the URL. If Google
   // redirects the request before the script runs, the browser drops the POST
   // body - the script then saw "action: undefined". URL parameters survive
@@ -287,9 +306,12 @@ async function backendGetOrders(){
     const first = check(await apiCall({action:'getOrders', offset:0, limit:PAGE_SIZE}));
     // A backend without paging ignores offset/limit and returns everything.
     if(typeof first.total !== 'number') return first.orders;
-    const offsets = [];
-    for(let off = PAGE_SIZE; off < first.total; off += PAGE_SIZE) offsets.push(off);
-    const rest = await Promise.all(offsets.map(off => apiCall({action:'getOrders', offset:off, limit:PAGE_SIZE}).then(check)));
+    // Pages are fetched one after another, not all at once - several
+    // simultaneous calls made Google's 404s much more frequent.
+    const rest = [];
+    for(let off = PAGE_SIZE; off < first.total; off += PAGE_SIZE){
+      rest.push(check(await apiCall({action:'getOrders', offset:off, limit:PAGE_SIZE})));
+    }
     const seen = new Set();
     const all = [];
     [first].concat(rest).forEach(page => page.orders.forEach(o => {
@@ -1191,7 +1213,9 @@ window.addEventListener('load', initGoogleSignIn);
 loadOrders();
 // Keep the Sheet in sync automatically - once shortly after opening, then
 // every few minutes while the tab stays open. No more manual clicking.
-setTimeout(() => runSync(false), 4000);
+// First background sync waits until the initial load has had time to finish,
+// so the two don't hit the backend at the same moment.
+setTimeout(() => runSync(false), 20000);
 setInterval(() => runSync(false), 5 * 60 * 1000);
 </script>
 </body>
