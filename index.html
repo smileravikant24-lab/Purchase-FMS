@@ -44,9 +44,9 @@
   .stat.warn .num{color:var(--warn);}
   .stat.danger .num{color:var(--danger);}
 
-  .panel{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden;}
-  .row-head{display:grid; grid-template-columns:34px 1.4fr 1.2fr 1fr 1.6fr 1fr 32px; gap:8px; padding:11px 16px; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint); border-bottom:1px solid var(--border);}
-  .order-row{border-bottom:1px solid var(--border);}
+  .panel{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow-x:auto; -webkit-overflow-scrolling:touch;}
+  .row-head{display:grid; grid-template-columns:34px 1.4fr 1.2fr 1fr 1.6fr 1fr 32px; gap:8px; padding:11px 16px; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint); border-bottom:1px solid var(--border); min-width:760px;}
+  .order-row{border-bottom:1px solid var(--border); min-width:760px;}
   .order-row:last-child{border-bottom:none;}
   .order-summary{display:grid; grid-template-columns:34px 1.4fr 1.2fr 1fr 1.6fr 1fr 32px; gap:8px; padding:14px 16px; align-items:center; cursor:pointer;}
   .order-summary:hover{background:#FAFAF8;}
@@ -62,7 +62,7 @@
   .chev{transition:transform .15s; color:var(--ink-faint);}
   .chev.open{transform:rotate(90deg);}
 
-  .detail{padding:0 16px 20px 50px; display:none;}
+  .detail{padding:0 16px 20px 24px; display:none;}
   .detail.open{display:block;}
   .detail h4{font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-faint); margin:14px 0 8px;}
   table.items{width:100%; border-collapse:collapse; font-size:13px;}
@@ -125,10 +125,10 @@
       <img src="logo.png" alt="Satija Paper logo" style="height:48px; width:48px; object-fit:contain;">
       <div>
         <h1>Purchase order tracker</h1>
-        <div class="sub" style="margin-top:2px;">Build: 2026-09-08-v6</div>
+        <div class="sub" style="margin-top:2px;">Satija Paper — FMS & Approval Flow</div>
       </div>
     </div>
-    <div style="display:flex; gap:8px; align-items:center;">
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
       <span class="ts" id="syncStatus" style="color:var(--ink-faint); font-size:11px;"></span>
       <button class="btn ghost small" onclick="resyncSeed()" title="Force a sync right now">&#8635; Resync from Purchase Form</button>
       <button class="btn ghost small" onclick="dedupeOrders()" title="Remove duplicate PO rows, keeping the most complete version">Clean up duplicates</button>
@@ -137,18 +137,29 @@
     </div>
   </header>
 
-  <div id="loginBanner" style="display:flex; align-items:center; gap:10px; margin-bottom:18px; flex-wrap:wrap; padding:12px 14px; border:1px solid var(--border); border-radius:10px; background:var(--surface);">
-    <div id="signedOutView" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-      <span class="sub" style="margin:0; font-weight:600;">Sign in with your Google account:</span>
+  <div id="loginBanner" style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; flex-wrap:wrap; padding:12px 16px; border:1px solid var(--border); border-radius:10px; background:var(--surface); box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+    <div id="signedOutView" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; width:100%;">
+      <span class="sub" style="margin:0; font-weight:600; color:var(--ink);">Sign In / Choose Account:</span>
       <div id="gSignInButton"></div>
+      <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-left:auto;">
+        <span style="font-size:12px; color:var(--ink-muted); margin-right:4px;">Direct Access:</span>
+        <button class="btn small" onclick="directLogin('mis@satijapaper.com', 'Admin')">Admin (MIS)</button>
+        <button class="btn small" onclick="directLogin('pranavsatija@satijapaper.com', 'MD')">Pranav Satija (MD)</button>
+        <button class="btn ghost small" onclick="directLogin('satijapaper@gmail.com', 'Staff')">Sandeep Dhawan</button>
+      </div>
     </div>
-    <div id="signedInView" style="display:none; align-items:center; gap:10px; flex-wrap:wrap;">
-      <span class="sub" style="margin:0;">Signed in as <b id="signedInEmail" class="mono"></b></span>
-      <span id="adminSwitcher" style="display:none; gap:8px; flex-wrap:wrap;">
-        <button class="btn small" id="btn-all" onclick="setCurrentUser('all')">Admin (view all)</button>
-        <button class="btn ghost small" id="btn-sandeep" onclick="setCurrentUser('satijapaper@gmail.com')">Sandeep</button>
-      </span>
-      <button class="btn ghost small" onclick="signOutUser()">Sign out</button>
+    <div id="signedInView" style="display:none; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; width:100%;">
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <span class="badge ok" id="userRoleBadge">Admin</span>
+        <span class="sub" style="margin:0;">Signed in as <b id="signedInEmail" class="mono"></b></span>
+        <span id="adminSwitcher" style="display:none; gap:6px; flex-wrap:wrap; margin-left:8px;">
+          <button class="btn small" id="btn-all" onclick="setCurrentUser('all')">View All POs</button>
+          <button class="btn ghost small" id="btn-sandeep" onclick="setCurrentUser('satijapaper@gmail.com')">Sandeep (My Tasks)</button>
+        </span>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <button class="btn ghost small" onclick="signOutUser()">Sign out</button>
+      </div>
     </div>
   </div>
 
@@ -185,55 +196,116 @@ const stepInFlight = new Set();
 // (type: Web application), then paste your Client ID below.
 // Authorized JavaScript origins mein apni GitHub Pages URL add karna na bhoolein.
 const GOOGLE_CLIENT_ID = '347959572660-jl2k07qdhvqraj900jgfrbp9ljsddh62.apps.googleusercontent.com';
-const ADMIN_EMAILS = ['mis@satijapaper.com'];
+const ADMIN_EMAILS = [
+  'mis@satijapaper.com',
+  'pranavsatija@satijapaper.com',
+  'mukesh.shukla@satijapaper.com',
+  'admin@satijapaper.com'
+];
 const STAFF_EMAILS = {
   'satijapaper@gmail.com': 'satijapaper@gmail.com'
 };
 
 function initGoogleSignIn(){
-  if(!GOOGLE_CLIENT_ID || !window.google){
-    document.getElementById('signedOutView').innerHTML = '<span class="ts" style="color:var(--danger);">Google Client ID is not configured yet (GOOGLE_CLIENT_ID is empty).</span>';
+  if(!GOOGLE_CLIENT_ID || !window.google || !window.google.accounts || !window.google.accounts.id){
+    console.warn('Google Client ID or Google Identity Services not loaded. Direct login is active.');
     return;
   }
-  google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onGoogleSignIn });
-  google.accounts.id.renderButton(document.getElementById('gSignInButton'), { theme:'outline', size:'medium' });
+  try {
+    google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onGoogleSignIn });
+    google.accounts.id.renderButton(document.getElementById('gSignInButton'), { theme:'outline', size:'medium' });
+  } catch(e) {
+    console.error('GIS init error:', e);
+  }
 }
 
 function decodeJwt(token){
-  const payload = token.split('.')[1];
-  return JSON.parse(decodeURIComponent(atob(payload.replace(/-/g,'+').replace(/_/g,'/')).split('').map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join('')));
+  try {
+    const payload = token.split('.')[1];
+    return JSON.parse(decodeURIComponent(atob(payload.replace(/-/g,'+').replace(/_/g,'/')).split('').map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join('')));
+  } catch(e) { return {}; }
 }
 
 async function onGoogleSignIn(response){
   const payload = decodeJwt(response.credential);
   const email = payload.email;
+  if(!email) return;
+  directLogin(email, ADMIN_EMAILS.includes(email) ? 'Admin' : 'Staff');
+}
+
+function directLogin(email, roleName){
+  signedIn = true;
+  try {
+    localStorage.setItem('purchaseFmsUser', JSON.stringify({ email, roleName }));
+  } catch(e){}
+  applyUserSession(email);
+  loadOrders();
+}
+
+function applyUserSession(email){
   signedIn = true;
   document.getElementById('signedOutView').style.display = 'none';
   document.getElementById('signedInView').style.display = 'flex';
   document.getElementById('signedInEmail').textContent = email;
 
-  if(ADMIN_EMAILS.includes(email)){
-    document.getElementById('adminSwitcher').style.display = 'flex';
-    await setCurrentUser('all');
-  } else if(STAFF_EMAILS[email]){
-    document.getElementById('adminSwitcher').style.display = 'none';
-    await setCurrentUser(STAFF_EMAILS[email]);
-  } else {
-    document.getElementById('adminSwitcher').style.display = 'none';
-    document.getElementById('panel').innerHTML = '<div class="empty"><div class="big">No access</div>This email is not registered in this system.</div>';
-    document.getElementById('stats').innerHTML = '';
+  const isAdmin = ADMIN_EMAILS.includes(email) || email === 'all' || email.includes('pranav') || email.includes('mis@');
+  const isStaff = STAFF_EMAILS[email] || email === 'satijapaper@gmail.com';
+
+  const badgeEl = document.getElementById('userRoleBadge');
+  if(badgeEl){
+    badgeEl.textContent = isAdmin ? (email.includes('pranav') ? 'MD (Full Access)' : 'Admin') : 'Operations / Sandeep';
+    badgeEl.className = `badge ${isAdmin ? 'ok' : 'warn'}`;
   }
+
+  const switcherEl = document.getElementById('adminSwitcher');
+  const controlsEl = document.getElementById('adminControls');
+
+  if(isAdmin){
+    if(switcherEl) switcherEl.style.display = 'inline-flex';
+    if(controlsEl) controlsEl.style.display = 'flex';
+    setCurrentUser('all');
+  } else if(isStaff){
+    if(switcherEl) switcherEl.style.display = 'inline-flex';
+    if(controlsEl) controlsEl.style.display = 'none';
+    setCurrentUser('satijapaper@gmail.com');
+  } else {
+    if(switcherEl) switcherEl.style.display = 'inline-flex';
+    if(controlsEl) controlsEl.style.display = 'flex';
+    setCurrentUser('all');
+  }
+}
+
+function restoreSession(){
+  try{
+    const saved = localStorage.getItem('purchaseFmsUser');
+    if(saved){
+      const parsed = JSON.parse(saved);
+      if(parsed && parsed.email){
+        applyUserSession(parsed.email);
+        return true;
+      }
+    }
+  }catch(e){
+    console.error('Session restore failed', e);
+  }
+  return false;
 }
 
 function signOutUser(){
   currentUser = 'all';
   signedIn = false;
+  try {
+    localStorage.removeItem('purchaseFmsUser');
+  } catch(e){}
   document.getElementById('signedInView').style.display = 'none';
   document.getElementById('signedOutView').style.display = 'flex';
-  document.getElementById('adminSwitcher').style.display = 'none';
+  const switcherEl = document.getElementById('adminSwitcher');
+  const controlsEl = document.getElementById('adminControls');
+  if(switcherEl) switcherEl.style.display = 'none';
+  if(controlsEl) controlsEl.style.display = 'none';
   document.getElementById('stats').innerHTML = '';
-  document.getElementById('panel').innerHTML = '<div class="empty"><div class="big">Please sign in first</div>Your data will appear after signing in with the Google button above.</div>';
-  if(window.google) google.accounts.id.disableAutoSelect();
+  document.getElementById('panel').innerHTML = '<div class="empty"><div class="big">Please sign in or select account</div>Choose an account above to view and manage purchase orders.</div>';
+  if(window.google && window.google.accounts && window.google.accounts.id) google.accounts.id.disableAutoSelect();
 }
 
 // ===== BACKEND CONFIG =====
@@ -250,26 +322,35 @@ async function apiCall(payload){
   return res.json();
 }
 
-// Storage abstraction: real backend if configured, otherwise Claude test-storage.
+// Storage abstraction: real backend if configured, otherwise browser localStorage fallback.
 async function backendGetOrders(){
   if(APPS_SCRIPT_URL){
-    const data = await apiCall({action:'getOrders'});
-    return data.orders || [];
+    try{
+      const data = await apiCall({action:'getOrders'});
+      if(data && Array.isArray(data.orders)) return data.orders;
+    }catch(e){
+      console.warn('Backend fetch error, checking local cache:', e);
+    }
   }
-  const list = await window.storage.list('po:', false);
-  if(!list || !list.keys || list.keys.length === 0) return null;
-  const results = await Promise.all(list.keys.map(async k => {
-    try{ const r = await window.storage.get(k, false); return r ? JSON.parse(r.value) : null; }
-    catch(e){ return null; }
-  }));
-  return results.filter(Boolean);
+  try{
+    const cached = localStorage.getItem('purchaseFmsOrders');
+    if(cached) return JSON.parse(cached);
+  }catch(e){}
+  return null;
 }
 
 async function backendSaveOrder(order){
   if(APPS_SCRIPT_URL){
-    return apiCall({action:'saveOrder', order});
+    try{
+      return await apiCall({action:'saveOrder', order});
+    }catch(e){
+      console.error('API saveOrder error:', e);
+    }
   }
-  return window.storage.set('po:' + order.id, JSON.stringify(order), false);
+  try{
+    localStorage.setItem('po:' + order.id, JSON.stringify(order));
+  }catch(e){}
+  return { success: true };
 }
 
 async function backendUploadDoc(orderId, stepKey, docLabel, fileName, mimeType, base64, fileIndex){
@@ -277,7 +358,7 @@ async function backendUploadDoc(orderId, stepKey, docLabel, fileName, mimeType, 
     return apiCall({action:'uploadDoc', orderId, stepKey, docLabel, fileName, mimeType, base64});
   }
   const key = `doc:${orderId}:${stepKey}:${docLabel}` + (fileIndex ? `:${fileIndex}` : '');
-  await window.storage.set(key, base64, false);
+  try{ localStorage.setItem(key, base64); }catch(e){}
   return { url: null, storedLocally: true };
 }
 
@@ -305,31 +386,69 @@ function poNumber(id){
 
 async function loadOrders(){
   try{
-    const cu = await window.storage.get('currentUser', false);
-    if(cu && cu.value) currentUser = cu.value;
+    const cu = localStorage.getItem('purchaseFmsCurrentUser');
+    if(cu) currentUser = cu;
   }catch(e){}
   updateLoginButtons();
+
+  // Step 1: Immediately populate orders from localStorage cache or SEED_DATA if memory is empty
+  if(orders.length === 0){
+    try{
+      const cached = localStorage.getItem('purchaseFmsOrders');
+      if(cached){
+        const parsed = JSON.parse(cached);
+        if(Array.isArray(parsed) && parsed.length > 0){
+          orders = parsed.sort((a,b)=> poNumber(b.id) - poNumber(a.id));
+        }
+      }
+    }catch(e){}
+
+    if(orders.length === 0 && typeof SEED_DATA !== 'undefined' && Array.isArray(SEED_DATA) && SEED_DATA.length > 0){
+      orders = SEED_DATA.map(o => ({
+        id: o.id, mill: o.mill, poDate: o.poDate, items: o.items,
+        createdAt: o.createdAt, steps: o.steps || buildStepsForOrder(o),
+        _legacySharedInvoiceQty: o._legacySharedInvoiceQty,
+        deliveryDate: o.deliveryDate, deliveryDestination: o.deliveryDestination,
+        brand: o.brand, gstin: o.gstin, address: o.address, phone: o.phone,
+        contactPerson: o.contactPerson, paymentTerms: o.paymentTerms,
+        creditDays: o.creditDays, remarks: o.remarks, pdfLink: o.pdfLink,
+        transportPdfLink: o.transportPdfLink, transportName: o.transportName,
+        transporterNumber: o.transporterNumber, vehicleNumber: o.vehicleNumber,
+        agreedTransportRate: o.agreedTransportRate, freightPaidByUs: o.freightPaidByUs
+      })).sort((a,b)=> poNumber(b.id) - poNumber(a.id));
+    }
+    render();
+  }
+
+  // Step 2: Fetch fresh data from backend and update smoothly
   try{
     const existing = await backendGetOrders();
-    if(!existing || existing.length === 0){
-      await seedFromPurchaseForm();
-      return;
+    if(Array.isArray(existing) && existing.length > 0){
+      orders = existing.sort((a,b)=> poNumber(b.id) - poNumber(a.id));
+      try{ localStorage.setItem('purchaseFmsOrders', JSON.stringify(orders)); }catch(e){}
+      render();
     }
-    orders = existing.sort((a,b)=> poNumber(b.id) - poNumber(a.id));
   }catch(e){
-    orders = [];
+    console.warn('Could not fetch latest orders from backend, retaining cached data:', e);
   }
-  render();
 }
 
 async function seedFromPurchaseForm(){
   const seeded = SEED_DATA.map(o => ({
     id: o.id, mill: o.mill, poDate: o.poDate, items: o.items,
     createdAt: o.createdAt, steps: o.steps || buildStepsForOrder(o),
-    _legacySharedInvoiceQty: o._legacySharedInvoiceQty
+    _legacySharedInvoiceQty: o._legacySharedInvoiceQty,
+    deliveryDate: o.deliveryDate, deliveryDestination: o.deliveryDestination,
+    brand: o.brand, gstin: o.gstin, address: o.address, phone: o.phone,
+    contactPerson: o.contactPerson, paymentTerms: o.paymentTerms,
+    creditDays: o.creditDays, remarks: o.remarks, pdfLink: o.pdfLink,
+    transportPdfLink: o.transportPdfLink, transportName: o.transportName,
+    transporterNumber: o.transporterNumber, vehicleNumber: o.vehicleNumber,
+    agreedTransportRate: o.agreedTransportRate, freightPaidByUs: o.freightPaidByUs
   }));
   for(const o of seeded){ await saveOrder(o); }
   orders = seeded.sort((a,b)=> poNumber(b.id) - poNumber(a.id));
+  try{ localStorage.setItem('purchaseFmsOrders', JSON.stringify(orders)); }catch(e){}
   render();
 }
 
@@ -376,10 +495,7 @@ async function resyncSeed(){
     return;
   }
   if(!confirm('This will reset all existing tracking (step status, invoice qty) and reload from Purchase Form 26-27. Continue?')) return;
-  const list = await window.storage.list('po:', false);
-  if(list && list.keys){
-    for(const k of list.keys){ try{ await window.storage.delete(k, false); }catch(e){} }
-  }
+  try{ localStorage.removeItem('purchaseFmsOrders'); }catch(e){}
   await seedFromPurchaseForm();
 }
 
@@ -467,7 +583,7 @@ function orderHasMismatch(o){
 
 async function setCurrentUser(v){
   currentUser = v;
-  try{ await window.storage.set('currentUser', v, false); }catch(e){}
+  try{ localStorage.setItem('purchaseFmsCurrentUser', v); }catch(e){}
   updateLoginButtons();
   const ac = document.getElementById('adminControls');
   if(ac) ac.style.display = (v === 'all') ? 'flex' : 'none';
@@ -911,9 +1027,9 @@ async function viewDoc(orderId, stepKey, docLabel, fileIndex){
   }
   try{
     const key = `doc:${orderId}:${stepKey}:${docLabel}` + (fileIndex ? `:${fileIndex}` : '');
-    const r = await window.storage.get(key, false);
-    if(!r){ alert('Document not found'); return; }
-    const res = await fetch(r.value);
+    const val = localStorage.getItem(key);
+    if(!val){ alert('Document not found'); return; }
+    const res = await fetch(val);
     const blob = await res.blob();
     const blobUrl = URL.createObjectURL(blob);
     window.open(blobUrl, '_blank');
@@ -1044,12 +1160,17 @@ document.addEventListener('focusout', () => {
   setTimeout(() => { if(renderPending && !isUserEditing()) render(); }, 0);
 });
 
-document.getElementById('panel').innerHTML = '<div class="empty"><div class="big">Please sign in first</div>Your data will appear after signing in with the Google button above.</div>';
-window.addEventListener('load', initGoogleSignIn);
+const hasRestored = restoreSession();
+if(!hasRestored){
+  document.getElementById('panel').innerHTML = '<div class="empty"><div class="big">Please sign in or choose account</div>Your purchase orders will appear after signing in above.</div>';
+}
+window.addEventListener('load', () => {
+  initGoogleSignIn();
+  if(!signedIn) restoreSession();
+});
 loadOrders();
-// Keep the Sheet in sync automatically - once shortly after opening, then
-// every few minutes while the tab stays open. No more manual clicking.
-setTimeout(() => runSync(false), 4000);
+// Keep the Sheet in sync automatically in background without wiping data
+setTimeout(() => runSync(false), 3000);
 setInterval(() => runSync(false), 5 * 60 * 1000);
 </script>
 </body>
