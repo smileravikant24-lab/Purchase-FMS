@@ -139,13 +139,8 @@
 
   <div id="loginBanner" style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; flex-wrap:wrap; padding:12px 16px; border:1px solid var(--border); border-radius:10px; background:var(--surface); box-shadow:0 1px 3px rgba(0,0,0,0.04);">
     <div id="signedOutView" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; width:100%;">
-      <span class="sub" style="margin:0; font-weight:600; color:var(--ink);">Sign In / Choose Account:</span>
+      <span class="sub" style="margin:0; font-weight:600; color:var(--ink);">Sign in with your Google account:</span>
       <div id="gSignInButton"></div>
-      <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-left:auto;">
-        <span style="font-size:12px; color:var(--ink-muted); margin-right:4px;">Direct Access:</span>
-        <button class="btn small" onclick="directLogin('mis@satijapaper.com', 'Admin')">Admin (MIS)</button>
-        <button class="btn ghost small" onclick="directLogin('satijapaper@gmail.com', 'Staff')">Sandeep Dhawan</button>
-      </div>
     </div>
     <div id="signedInView" style="display:none; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; width:100%;">
       <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
@@ -206,7 +201,6 @@ const STAFF_EMAILS = {
 
 function initGoogleSignIn(){
   if(!GOOGLE_CLIENT_ID || !window.google || !window.google.accounts || !window.google.accounts.id){
-    console.warn('Google Client ID or Google Identity Services not loaded. Direct login is active.');
     return;
   }
   try {
@@ -226,15 +220,20 @@ function decodeJwt(token){
 
 async function onGoogleSignIn(response){
   const payload = decodeJwt(response.credential);
-  const email = payload.email;
+  const email = (payload.email || '').toLowerCase().trim();
   if(!email) return;
-  directLogin(email, ADMIN_EMAILS.includes(email) ? 'Admin' : 'Staff');
-}
 
-function directLogin(email, roleName){
+  const isAdmin = ADMIN_EMAILS.includes(email) || email === 'mis@satijapaper.com';
+  const isStaff = STAFF_EMAILS[email] || email === 'satijapaper@gmail.com';
+
+  if(!isAdmin && !isStaff){
+    alert(`Access denied: ${email} is not authorized for Purchase FMS.`);
+    return;
+  }
+
   signedIn = true;
   try {
-    localStorage.setItem('purchaseFmsUser', JSON.stringify({ email, roleName }));
+    localStorage.setItem('purchaseFmsUser', JSON.stringify({ email, roleName: isAdmin ? 'Admin' : 'Staff' }));
   } catch(e){}
   applyUserSession(email);
   loadOrders();
