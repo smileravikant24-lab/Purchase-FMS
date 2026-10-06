@@ -125,7 +125,7 @@
       <img src="logo.png" alt="Satija Paper logo" style="height:48px; width:48px; object-fit:contain;">
       <div>
         <h1>Purchase order tracker</h1>
-        <div class="sub" style="margin-top:2px;">Build: 2026-10-06-v8</div>
+        <div class="sub" style="margin-top:2px;">Build: 2026-10-06-v9</div>
       </div>
     </div>
     <div style="display:flex; gap:8px; align-items:center;">
@@ -245,7 +245,18 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxERIcFjijQaky9
 // error page (script crash, timeout, quota) the real reason is shown instead
 // of a bare JSON parse error.
 async function apiCall(payload){
-  const res = await fetch(APPS_SCRIPT_URL, {
+  // The action and other short fields also travel in the URL. If Google
+  // redirects the request before the script runs, the browser drops the POST
+  // body - the script then saw "action: undefined". URL parameters survive
+  // that redirect, so the script always knows what was asked.
+  const qs = new URLSearchParams();
+  Object.keys(payload).forEach(k => {
+    const v = payload[k];
+    if(v === null || v === undefined || typeof v === 'object') return;
+    if(String(v).length <= 200) qs.set(k, String(v));
+  });
+  const url = APPS_SCRIPT_URL + (APPS_SCRIPT_URL.indexOf('?') > -1 ? '&' : '?') + qs.toString();
+  const res = await fetch(url, {
     method: 'POST',
     headers: {'Content-Type': 'text/plain;charset=utf-8'},
     body: JSON.stringify(payload)
@@ -460,6 +471,7 @@ async function runSync(showAlert){
   if(statusEl) statusEl.textContent = 'Syncing…';
   try{
     const result = await apiCall({action:'resync'});
+    if(result && result.error) throw new Error(result.error);
     const fmsNote = result.oldFmsAvailable === false ? ' (old FMS not reachable, skipped)' : '';
 
     // Also make sure no historical orders (like old PO0001-0049) are missing -
@@ -472,6 +484,7 @@ async function runSync(showAlert){
       const missingSeed = SEED_DATA.filter(o => !known.has(String(o.id).trim()));
       for(let i = 0; i < missingSeed.length; i += 10){
         const historyResult = await apiCall({action:'seedHistory', historyOrders: missingSeed.slice(i, i + 10)});
+        if(historyResult && historyResult.error) throw new Error(historyResult.error);
         historyAdded += historyResult.added || 0;
       }
     }catch(e){
@@ -485,7 +498,7 @@ async function runSync(showAlert){
     await loadOrders();
   }catch(e){
     console.error('sync failed', e);
-    if(statusEl) statusEl.textContent = 'Sync failed, will retry automatically';
+    if(statusEl) statusEl.textContent = 'Sync failed: ' + ((e && e.message) || e) + ' - will retry automatically';
   }finally{
     syncInFlight = false;
   }
@@ -528,7 +541,10 @@ async function dedupeOrders(){
 
 async function saveOrder(o){
   try{
-    await backendSaveOrder(o);
+    // A backend error reply used to count as "saved" - now it is a failure,
+    // so "Mark done" never looks successful when nothing was written.
+    const r = await backendSaveOrder(o);
+    if(r && r.error) throw new Error(r.error);
     return true;
   }catch(e){
     console.error('save failed', e);
@@ -1123,6 +1139,7 @@ async function doCompleteStep(orderId, stepKey){
       const f = list[fi];
       try{
         const result = await backendUploadDoc(orderId, stepKey, d, f.name, f.dataUrl.split(';')[0].split(':')[1], f.dataUrl, fi);
+        if(result && result.error) throw new Error(result.error);
         saved.push({ name: f.name, url: result.url || null });
       }catch(e){
         console.error('doc save failed', e);
