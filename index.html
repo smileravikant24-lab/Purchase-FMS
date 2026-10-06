@@ -125,7 +125,7 @@
       <img src="logo.png" alt="Satija Paper logo" style="height:48px; width:48px; object-fit:contain;">
       <div>
         <h1>Purchase order tracker</h1>
-        <div class="sub" style="margin-top:2px;">Build: 2026-10-06-v7</div>
+        <div class="sub" style="margin-top:2px;">Build: 2026-10-06-v8</div>
       </div>
     </div>
     <div style="display:flex; gap:8px; align-items:center;">
@@ -263,14 +263,31 @@ async function apiCall(payload){
 // Storage abstraction: real backend if configured, otherwise Claude test-storage.
 async function backendGetOrders(){
   if(APPS_SCRIPT_URL){
-    const data = await apiCall({action:'getOrders'});
-    // An error reply must NOT be treated as "no orders" - that used to show
-    // "No purchase orders yet" (and could trigger a re-seed) while the sheet
-    // actually had pending orders.
-    if(!data || data.error || !Array.isArray(data.orders)){
-      throw new Error('getOrders failed: ' + ((data && (data.error || data.message)) || 'reply had no orders list'));
-    }
-    return data.orders;
+    // Orders are fetched in small pages. Google could not deliver the full
+    // list in one reply (HTTP 404 from the echo URL), while small replies go
+    // through fine. An error reply must NOT be treated as "no orders".
+    const PAGE_SIZE = 20;
+    const check = data => {
+      if(!data || data.error || !Array.isArray(data.orders)){
+        throw new Error('getOrders failed: ' + ((data && (data.error || data.message)) || 'reply had no orders list'));
+      }
+      return data;
+    };
+    const first = check(await apiCall({action:'getOrders', offset:0, limit:PAGE_SIZE}));
+    // A backend without paging ignores offset/limit and returns everything.
+    if(typeof first.total !== 'number') return first.orders;
+    const offsets = [];
+    for(let off = PAGE_SIZE; off < first.total; off += PAGE_SIZE) offsets.push(off);
+    const rest = await Promise.all(offsets.map(off => apiCall({action:'getOrders', offset:off, limit:PAGE_SIZE}).then(check)));
+    const seen = new Set();
+    const all = [];
+    [first].concat(rest).forEach(page => page.orders.forEach(o => {
+      const id = String(o && o.id).trim();
+      if(seen.has(id)) return;
+      seen.add(id);
+      all.push(o);
+    }));
+    return all;
   }
   const list = await window.storage.list('po:', false);
   if(!list || !list.keys || list.keys.length === 0) return null;
@@ -447,10 +464,16 @@ async function runSync(showAlert){
 
     // Also make sure no historical orders (like old PO0001-0049) are missing -
     // done as one batch call on the backend, only ever adds, never overwrites.
+    // Only orders not already loaded are sent, in small batches - sending the
+    // whole history list in one request was too big for Google to answer.
     let historyAdded = 0;
     try{
-      const historyResult = await apiCall({action:'seedHistory', historyOrders: SEED_DATA});
-      historyAdded = historyResult.added || 0;
+      const known = new Set(orders.map(o => String(o.id).trim()));
+      const missingSeed = SEED_DATA.filter(o => !known.has(String(o.id).trim()));
+      for(let i = 0; i < missingSeed.length; i += 10){
+        const historyResult = await apiCall({action:'seedHistory', historyOrders: missingSeed.slice(i, i + 10)});
+        historyAdded += historyResult.added || 0;
+      }
     }catch(e){
       console.error('seedHistory failed', e);
     }
