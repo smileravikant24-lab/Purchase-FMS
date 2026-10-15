@@ -652,7 +652,7 @@
         <img src="logo.png" alt="Satija Paper logo" style="height:48px; width:48px; object-fit:contain;">
         <div>
           <h1>Purchase order tracker</h1>
-          <div class="sub" style="margin-top:2px;">Build: 2026-09-08-v6</div>
+          <div class="sub" style="margin-top:2px;">Build: 2026-10-15-v7</div>
         </div>
       </div>
       <div style="display:flex; gap:8px; align-items:center;">
@@ -1353,7 +1353,11 @@
       }).join('');
       const po3Section = s.key === 'PO3' ? po3ConfirmSection(o) : '';
       const po4Fields = s.key === 'PO4' ? `<div class="doc-row"><span>Driver status</span><input type="text" id="fld-${o.id}-PO4-driverStatus" oninput="noteDraft(this)"></div>` : '';
-      const po6Fields = s.key === 'PO6' ? `<div class="doc-row"><span>E-Way Bill No. (16 digits)</span><input type="text" id="fld-${o.id}-PO6-ewayBillNumber" maxlength="16" pattern="[0-9]{16}" inputmode="numeric" placeholder="16-digit E-Way Bill No." value="${(o.steps.PO6 && o.steps.PO6.ewayBillNumber) || ''}" oninput="this.value=this.value.replace(/[^0-9]/g,'');noteDraft(this)"></div>` : '';
+      const po6Fields = s.key === 'PO6' ? `
+        <div class="doc-row" style="background:#FFF9EB; padding:8px 10px; border-radius:6px; border:1px solid #FFE0A3; margin:8px 0;">
+          <span style="font-weight:600; color:#7A4100; font-size:12.5px;">E-Way Bill No. (16 digits) *</span>
+          <input type="text" id="fld-${o.id}-PO6-ewayBillNumber" maxlength="16" pattern="[0-9]{16}" inputmode="numeric" placeholder="Enter 16-digit E-Way Bill Number" value="${(o.steps.PO6 && o.steps.PO6.ewayBillNumber) || ''}" oninput="this.value=this.value.replace(/[^0-9]/g,'');noteDraft(this)" style="font-family:'JetBrains Mono',monospace; font-weight:600; font-size:13px; background:#fff;">
+        </div>` : '';
 
       const poDateStr = fmtPoDate(o.poDate, o.createdAt);
       const isTransferred = isTransferNA(o, s.key);
@@ -1460,8 +1464,10 @@
       }
 
       const poDateStr = fmtPoDate(o.poDate, o.createdAt);
+      const ewayNo = (o.steps && o.steps.PO6 && o.steps.PO6.ewayBillNumber) || '';
       const orderInfoRows = [
         ['PO date', poDateStr],
+        ['E-Way Bill No.', ewayNo ? `<span class="mono" style="font-weight:600;">${ewayNo}</span>` : '—'],
         ['GSTIN', o.gstin], ['Address', o.address], ['Phone', o.phone],
         ['Contact person', o.contactPerson], ['Payment terms', o.paymentTerms],
         ['Credit days', o.creditDays], ['Delivery destination', o.deliveryDestination],
@@ -1526,8 +1532,15 @@
           const rows = [['Lead time', st.leadTime], ['Driver status', st.driverStatus]].filter(([, v]) => v);
           if (rows.length) extraFieldsHtml = `<div class="ts" style="margin-top:4px; line-height:1.6;">${rows.map(([k, v]) => `${k}: ${v}`).join('<br>')}</div>`;
         } else if (s.key === 'PO6') {
-          const rows = [['E-Way Bill No.', st.ewayBillNumber]].filter(([, v]) => v);
-          if (rows.length) extraFieldsHtml = `<div class="ts" style="margin-top:4px; line-height:1.6;">${rows.map(([k, v]) => `${k}: ${v}`).join('<br>')}</div>`;
+          const val = st.ewayBillNumber || '';
+          extraFieldsHtml = `
+            <div class="ts" style="margin-top:6px; line-height:1.5; padding:6px 8px; background:var(--bg); border-radius:6px; border:1px solid var(--border);">
+              <div style="font-size:10px; color:var(--ink-muted); text-transform:uppercase; font-weight:600; letter-spacing:0.02em;">E-Way Bill No. (16 digits)</div>
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:4px; margin-top:3px;">
+                <span class="mono" style="font-weight:600; font-size:12px; color:var(--ink);">${val ? val : '<span style="color:var(--ink-faint); font-weight:normal;">Not added yet</span>'}</span>
+                <button class="btn ghost small" style="padding:1px 7px; font-size:10px;" onclick="promptUpdateEwayBill('${o.id}')">${val ? 'Edit' : '+ Enter No.'}</button>
+              </div>
+            </div>`;
         }
         let actionHtml = '';
         if (i === idx && !stepIsDone(o, s.key)) {
@@ -1542,7 +1555,11 @@
           }).join('');
           const po3Section = s.key === 'PO3' ? po3ConfirmSection(o) : '';
           const po4Fields = s.key === 'PO4' ? `<div class="doc-row"><span>Driver status</span><input type="text" id="fld-${o.id}-PO4-driverStatus" oninput="noteDraft(this)"></div>` : '';
-          const po6Fields = s.key === 'PO6' ? `<div class="doc-row"><span>E-Way Bill No. (16 digits)</span><input type="text" id="fld-${o.id}-PO6-ewayBillNumber" maxlength="16" pattern="[0-9]{16}" inputmode="numeric" placeholder="16-digit E-Way Bill No." value="${(o.steps.PO6 && o.steps.PO6.ewayBillNumber) || ''}" oninput="this.value=this.value.replace(/[^0-9]/g,'');noteDraft(this)"></div>` : '';
+          const po6Fields = s.key === 'PO6' ? `
+            <div class="doc-row" style="background:#FFF9EB; padding:8px 10px; border-radius:6px; border:1px solid #FFE0A3; margin:8px 0;">
+              <span style="font-weight:600; color:#7A4100; font-size:12.5px;">E-Way Bill No. (16 digits) *</span>
+              <input type="text" id="fld-${o.id}-PO6-ewayBillNumber" maxlength="16" pattern="[0-9]{16}" inputmode="numeric" placeholder="Enter 16-digit E-Way Bill Number" value="${(o.steps.PO6 && o.steps.PO6.ewayBillNumber) || ''}" oninput="this.value=this.value.replace(/[^0-9]/g,'');noteDraft(this)" style="font-family:'JetBrains Mono',monospace; font-weight:600; font-size:13px; background:#fff;">
+            </div>` : '';
           currentPanelHtml = `<div style="margin-top:14px; padding:14px 16px; border:1px solid var(--border); border-radius:10px; background:var(--surface);">
           <h4 style="margin:0 0 4px;">${s.key} &middot; ${s.label} &mdash; confirm</h4>
           ${po3Section}${po4Fields}${po6Fields}${docInputs}
@@ -1764,6 +1781,34 @@
       }
       clearDrafts(orderId, stepKey);
       render(true);
+    }
+
+    async function promptUpdateEwayBill(orderId) {
+      const o = orders.find(x => x.id === orderId);
+      if (!o) return;
+      if (!o.steps) o.steps = {};
+      if (!o.steps.PO6) o.steps.PO6 = { status: 'pending', planned: (o.createdAt || Date.now()) + 120 * 3600 * 1000 };
+      const current = o.steps.PO6.ewayBillNumber || '';
+      const input = prompt('Enter 16-digit E-Way Bill Number:', current);
+      if (input === null) return;
+      const val = input.trim();
+      if (!val) {
+        if (!confirm('Clear the E-Way Bill Number for this order?')) return;
+        o.steps.PO6.ewayBillNumber = '';
+      } else {
+        if (!/^\d{16}$/.test(val)) {
+          alert('Invalid E-Way Bill Number! It must be exactly 16 digits (numeric only).');
+          return;
+        }
+        o.steps.PO6.ewayBillNumber = val;
+      }
+      const saved = await saveOrder(o);
+      if (saved) {
+        try { localStorage.setItem('purchaseFmsOrders', JSON.stringify(orders)); } catch (e) { }
+        render(true);
+      } else {
+        alert('Could not save E-Way Bill Number to server. Please check your connection.');
+      }
     }
 
 
