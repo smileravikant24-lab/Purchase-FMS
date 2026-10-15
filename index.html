@@ -710,7 +710,7 @@
     ];
     // Docs that cannot be skipped with a confirm dialog - the step simply won't
     // complete without them.
-    const MANDATORY_DOCS = { PO3: ['Invoice PDF'] };
+    const MANDATORY_DOCS = { PO2: ['Confirmation PDF'], PO3: ['Invoice PDF'] };
     const PURCHASE_FORM_URL = 'https://docs.google.com/spreadsheets/d/1bzFrGTL-oaGrrjyXgI8WJuKOzgJG2-9jcD8r80QR73w/edit';
     let currentUser = 'all';
     let pendingDocs = {};
@@ -1041,6 +1041,14 @@
 
     async function saveOrder(o) {
       try {
+        if (o.steps && o.steps.PO3 && o.steps.PO3.transferStatus === 'Yes') {
+          ['PO4', 'PO5', 'PO6'].forEach(k => {
+            if (!o.steps[k]) o.steps[k] = {};
+            o.steps[k].status = 'skipped';
+            o.steps[k].planned = null;
+            o.steps[k].actual = null;
+          });
+        }
         await backendSaveOrder(o);
         return true;
       } catch (e) {
@@ -1339,14 +1347,17 @@
         const safe = d.replace(/\s+/g, '_');
         return `<div class="doc-row">
       <span>${d}</span>
-      <input type="file" multiple id="doc-${o.id}-${s.key}-${safe}" onchange="handleFileSelect(event,'${o.id}','${s.key}','${d}')">
+      <input type="file" multiple accept=".pdf,application/pdf,image/*" id="doc-${o.id}-${s.key}-${safe}" onchange="handleFileSelect(event,'${o.id}','${s.key}','${d}')">
       <span class="ts" id="docstat-${o.id}-${s.key}-${safe}" style="min-width:80px;">(max 5)</span>
     </div>`;
       }).join('');
       const po3Section = s.key === 'PO3' ? po3ConfirmSection(o) : '';
       const po4Fields = s.key === 'PO4' ? `<div class="doc-row"><span>Driver status</span><input type="text" id="fld-${o.id}-PO4-driverStatus" oninput="noteDraft(this)"></div>` : '';
+      const po6Fields = s.key === 'PO6' ? `<div class="doc-row"><span>E-Way Bill No. (16 digits)</span><input type="text" id="fld-${o.id}-PO6-ewayBillNumber" maxlength="16" pattern="[0-9]{16}" inputmode="numeric" placeholder="16-digit E-Way Bill No." value="${(o.steps.PO6 && o.steps.PO6.ewayBillNumber) || ''}" oninput="this.value=this.value.replace(/[^0-9]/g,'');noteDraft(this)"></div>` : '';
 
       const poDateStr = fmtPoDate(o.poDate, o.createdAt);
+      const isTransferred = isTransferNA(o, s.key);
+      const plannedSub = isTransferred ? 'Transferred to other party' : (st.planned ? `Planned: ${fmtDate(st.planned)} ${delayText(st)}` : '');
 
       return `<div class="task-card ${overdue ? 'overdue' : ''}">
     <div class="task-head">
@@ -1356,9 +1367,9 @@
       </div>
       <span class="badge ${overdue ? 'danger' : 'warn'}">${s.key} \u00b7 ${s.label}${overdue ? ' \u00b7 overdue' : ''}</span>
     </div>
-    <div class="task-sub">${o.mill} &middot; Planned: ${fmtDate(st.planned)} ${delayText(st)}</div>
+    <div class="task-sub">${o.mill}${plannedSub ? ' &middot; ' + plannedSub : ''}</div>
     <div class="task-items">${itemsLine}</div>
-    ${po3Section}${po4Fields}${docInputs}
+    ${po3Section}${po4Fields}${po6Fields}${docInputs}
     <button class="btn small" id="markdone-${o.id}-${s.key}" style="margin-top:8px;" onclick="completeStep('${o.id}','${s.key}')">Mark done</button>
   </div>`;
     }
@@ -1487,11 +1498,11 @@
       STEPS.forEach((s, i) => {
         const st = (o.steps && o.steps[s.key]) || { planned: (o.createdAt || Date.now()) + s.hours * 3600 * 1000, status: 'pending' };
         const naSkip = st.status === 'skipped' || (isTransferNA(o, s.key) && st.status !== 'done');
-        const overdue = !stepIsDone(o, s.key) && !naSkip && Date.now() > st.planned;
+        const overdue = !stepIsDone(o, s.key) && !naSkip && st.planned && Date.now() > st.planned;
         let cls = 'step-card';
         if (stepIsDone(o, s.key)) cls += ' done';
         else if (i === idx) cls += ' current';
-        const plannedLine = naSkip ? '' : `<div class="time">Planned: ${fmtDate(st.planned)}</div>`;
+        const plannedLine = (naSkip || !st.planned) ? '' : `<div class="time">Planned: ${fmtDate(st.planned)}</div>`;
         const doneLine = (st.status === 'done'
           ? `<div class="time">Done: ${fmtDate(st.actual)}</div>`
           : naSkip
@@ -1514,6 +1525,9 @@
         } else if (s.key === 'PO4') {
           const rows = [['Lead time', st.leadTime], ['Driver status', st.driverStatus]].filter(([, v]) => v);
           if (rows.length) extraFieldsHtml = `<div class="ts" style="margin-top:4px; line-height:1.6;">${rows.map(([k, v]) => `${k}: ${v}`).join('<br>')}</div>`;
+        } else if (s.key === 'PO6') {
+          const rows = [['E-Way Bill No.', st.ewayBillNumber]].filter(([, v]) => v);
+          if (rows.length) extraFieldsHtml = `<div class="ts" style="margin-top:4px; line-height:1.6;">${rows.map(([k, v]) => `${k}: ${v}`).join('<br>')}</div>`;
         }
         let actionHtml = '';
         if (i === idx && !stepIsDone(o, s.key)) {
@@ -1522,14 +1536,16 @@
             const safe = d.replace(/\s+/g, '_');
             return `<div class="doc-row">
           <span>${d}</span>
-          <input type="file" multiple id="doc-${o.id}-${s.key}-${safe}" onchange="handleFileSelect(event,'${o.id}','${s.key}','${d}')">
+          <input type="file" multiple accept=".pdf,application/pdf,image/*" id="doc-${o.id}-${s.key}-${safe}" onchange="handleFileSelect(event,'${o.id}','${s.key}','${d}')">
+          <span class="ts" id="docstat-${o.id}-${s.key}-${safe}" style="min-width:80px;">(max 5)</span>
         </div>`;
           }).join('');
           const po3Section = s.key === 'PO3' ? po3ConfirmSection(o) : '';
           const po4Fields = s.key === 'PO4' ? `<div class="doc-row"><span>Driver status</span><input type="text" id="fld-${o.id}-PO4-driverStatus" oninput="noteDraft(this)"></div>` : '';
+          const po6Fields = s.key === 'PO6' ? `<div class="doc-row"><span>E-Way Bill No. (16 digits)</span><input type="text" id="fld-${o.id}-PO6-ewayBillNumber" maxlength="16" pattern="[0-9]{16}" inputmode="numeric" placeholder="16-digit E-Way Bill No." value="${(o.steps.PO6 && o.steps.PO6.ewayBillNumber) || ''}" oninput="this.value=this.value.replace(/[^0-9]/g,'');noteDraft(this)"></div>` : '';
           currentPanelHtml = `<div style="margin-top:14px; padding:14px 16px; border:1px solid var(--border); border-radius:10px; background:var(--surface);">
           <h4 style="margin:0 0 4px;">${s.key} &middot; ${s.label} &mdash; confirm</h4>
-          ${po3Section}${po4Fields}${docInputs}
+          ${po3Section}${po4Fields}${po6Fields}${docInputs}
           <button class="btn small" id="markdone-${o.id}-${s.key}" style="margin-top:10px;" onclick="completeStep('${o.id}','${s.key}')">Mark done</button>
         </div>`;
         } else if (!naSkip && st.status === 'done' && s.docs.length) {
@@ -1673,6 +1689,19 @@
           o.steps.PO4.leadTime = days + ' day' + (days === 1 ? '' : 's');
         }
       }
+      if (stepKey === 'PO6') {
+        const el = document.getElementById(`fld-${orderId}-PO6-ewayBillNumber`);
+        const val = el ? el.value.trim() : '';
+        if (!val) {
+          alert('E-Way Bill Number is mandatory. Please enter a valid 16-digit E-Way Bill Number.');
+          return;
+        }
+        if (!/^\d{16}$/.test(val)) {
+          alert('E-Way Bill Number must be exactly 16 digits.');
+          return;
+        }
+        o.steps.PO6.ewayBillNumber = val;
+      }
 
       const uploaded = (pendingDocs[orderId] && pendingDocs[orderId][stepKey]) || {};
       const alreadyHave = (o.steps[stepKey].docs) || {};
@@ -1718,11 +1747,13 @@
 
       // A dropped transfer (Transfer status = Yes) means the order never goes
       // through warehouse delivery/transporter follow-up - mark remaining steps
-      // as skipped so they display as "Not applicable" without a completion timestamp.
+      // as skipped and clear planned dates so they display as "Not applicable" without dates.
       if (stepKey === 'PO3' && o.steps.PO3.transferStatus === 'Yes') {
         const idx = STEPS.findIndex(s => s.key === 'PO3');
         STEPS.slice(idx + 1).forEach(s => {
           o.steps[s.key].status = 'skipped';
+          o.steps[s.key].planned = null;
+          o.steps[s.key].actual = null;
         });
       }
 
