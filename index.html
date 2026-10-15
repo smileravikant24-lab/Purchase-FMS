@@ -642,17 +642,177 @@
       gap: 10px;
       margin-top: 18px;
     }
+
+    /* ===== MODERN SLEEK TOAST NOTIFICATIONS ===== */
+    #toastContainer {
+      position: fixed;
+      top: 24px;
+      right: 24px;
+      z-index: 9999999;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: none;
+      max-width: 390px;
+      width: calc(100vw - 48px);
+    }
+
+    @media (max-width: 600px) {
+      #toastContainer {
+        top: 14px;
+        right: 14px;
+        left: 14px;
+        width: auto;
+        max-width: none;
+      }
+    }
+
+    .toast {
+      pointer-events: auto;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 13px 15px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(225, 227, 220, 0.9);
+      box-shadow: 0 16px 36px -6px rgba(28, 33, 25, 0.14), 0 4px 14px -2px rgba(28, 33, 25, 0.08);
+      transform: translateY(-14px) scale(0.95);
+      opacity: 0;
+      transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.24s ease;
+      position: relative;
+      overflow: hidden;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    .toast.toast-show {
+      transform: translateY(0) scale(1);
+      opacity: 1;
+    }
+
+    .toast.toast-hide {
+      transform: translateY(-10px) scale(0.94);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .toast-icon-wrap {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 1px;
+    }
+
+    .toast-success {
+      border-left: 3.5px solid #0F6E56;
+    }
+    .toast-success .toast-icon-wrap {
+      background: #E1F5EE;
+      color: #0F6E56;
+    }
+
+    .toast-error {
+      border-left: 3.5px solid #A32D2D;
+    }
+    .toast-error .toast-icon-wrap {
+      background: #FCEBEB;
+      color: #A32D2D;
+    }
+
+    .toast-warn {
+      border-left: 3.5px solid #D97706;
+    }
+    .toast-warn .toast-icon-wrap {
+      background: #FEF3C7;
+      color: #B45309;
+    }
+
+    .toast-info {
+      border-left: 3.5px solid #2563EB;
+    }
+    .toast-info .toast-icon-wrap {
+      background: #EFF6FF;
+      color: #2563EB;
+    }
+
+    .toast-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .toast-title {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: #1C2119;
+      line-height: 1.35;
+      margin-bottom: 2px;
+    }
+
+    .toast-desc {
+      font-size: 12.5px;
+      color: #5C6457;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+
+    .toast-close {
+      flex-shrink: 0;
+      background: transparent;
+      border: none;
+      color: #8A9080;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      padding: 3px 5px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .toast-close:hover {
+      background: rgba(0, 0, 0, 0.06);
+      color: #1C2119;
+    }
+
+    .toast-progress {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      height: 2.5px;
+      width: 100%;
+      transform-origin: left;
+      animation: toastProgress linear forwards;
+    }
+
+    .toast-success .toast-progress { background: #0F6E56; }
+    .toast-error .toast-progress { background: #A32D2D; }
+    .toast-warn .toast-progress { background: #D97706; }
+    .toast-info .toast-progress { background: #2563EB; }
+
+    @keyframes toastProgress {
+      from { transform: scaleX(1); }
+      to { transform: scaleX(0); }
+    }
   </style>
 </head>
 
 <body>
+  <div id="toastContainer"></div>
   <div class="wrap">
     <header>
       <div style="display:flex; align-items:center; gap:12px;">
         <img src="logo.png" alt="Satija Paper logo" style="height:48px; width:48px; object-fit:contain;">
         <div>
           <h1>Purchase order tracker</h1>
-          <div class="sub" style="margin-top:2px;">Build: 2026-10-15-v8</div>
+          <div class="sub" style="margin-top:2px;">Build: 2026-10-15-v9</div>
         </div>
       </div>
       <div style="display:flex; gap:8px; align-items:center;">
@@ -700,6 +860,102 @@
   </div>
 
   <script>
+    // ===== SLEEK TOAST NOTIFICATION SYSTEM =====
+    const toast = {
+      container: null,
+      maxVisible: 5,
+      getContainer() {
+        if (!this.container) {
+          let el = document.getElementById('toastContainer');
+          if (!el) {
+            el = document.createElement('div');
+            el.id = 'toastContainer';
+            document.body.appendChild(el);
+          }
+          this.container = el;
+        }
+        return this.container;
+      },
+      show(message, type = 'info', title = '', duration = 4000) {
+        const container = this.getContainer();
+        while (container.children.length >= this.maxVisible) {
+          container.removeChild(container.firstChild);
+        }
+
+        const toastEl = document.createElement('div');
+        toastEl.className = `toast toast-${type}`;
+
+        const icons = {
+          success: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>`,
+          error: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
+          warn: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+          info: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`
+        };
+
+        const defaultTitles = {
+          success: 'Success',
+          error: 'Error',
+          warn: 'Attention',
+          info: 'Notice'
+        };
+
+        const msgStr = String(message || '');
+        const displayTitle = title || (msgStr.length > 40 ? defaultTitles[type] : msgStr);
+        const displayDesc = title ? msgStr : (msgStr.length > 40 ? msgStr : '');
+
+        toastEl.innerHTML = `
+          <div class="toast-icon-wrap">${icons[type] || icons.info}</div>
+          <div class="toast-content">
+            <div class="toast-title">${displayTitle}</div>
+            ${displayDesc ? `<div class="toast-desc">${displayDesc}</div>` : ''}
+          </div>
+          <button class="toast-close" title="Dismiss" type="button">&times;</button>
+          ${duration > 0 ? `<div class="toast-progress" style="animation-duration:${duration}ms;"></div>` : ''}
+        `;
+
+        container.appendChild(toastEl);
+        requestAnimationFrame(() => {
+          toastEl.classList.add('toast-show');
+        });
+
+        let timer = null;
+        const removeToast = () => {
+          if (toastEl.classList.contains('toast-hide')) return;
+          toastEl.classList.remove('toast-show');
+          toastEl.classList.add('toast-hide');
+          setTimeout(() => { if (toastEl.parentNode) toastEl.remove(); }, 320);
+        };
+
+        if (duration > 0) {
+          timer = setTimeout(removeToast, duration);
+          toastEl.addEventListener('mouseenter', () => {
+            if (timer) clearTimeout(timer);
+            const prog = toastEl.querySelector('.toast-progress');
+            if (prog) prog.style.animationPlayState = 'paused';
+          });
+          toastEl.addEventListener('mouseleave', () => {
+            const prog = toastEl.querySelector('.toast-progress');
+            if (prog) prog.style.animationPlayState = 'running';
+            timer = setTimeout(removeToast, 1200);
+          });
+        }
+
+        const closeBtn = toastEl.querySelector('.toast-close');
+        if (closeBtn) closeBtn.onclick = removeToast;
+
+        return toastEl;
+      },
+      success(msg, title = '', duration = 4000) { return this.show(msg, 'success', title, duration); },
+      error(msg, title = '', duration = 5000) { return this.show(msg, 'error', title, duration); },
+      warn(msg, title = '', duration = 4500) { return this.show(msg, 'warn', title, duration); },
+      info(msg, title = '', duration = 4000) { return this.show(msg, 'info', title, duration); }
+    };
+
+    window.toast = toast;
+    window.alert = function(msg) {
+      toast.warn(String(msg));
+    };
+
     const STEPS = [
       { key: 'PO1', label: 'Order placed', hours: 0, doerName: 'Mr. Sandeep Dhawan', doerEmails: ['satijapaper@gmail.com'], docs: [] },
       { key: 'PO2', label: 'Mill confirms', hours: 24, doerName: 'Mr. Sandeep Dhawan', doerEmails: ['satijapaper@gmail.com'], docs: ['Confirmation PDF'] },
@@ -993,7 +1249,7 @@
         const summary = `${result.added || 0} new, ${historyAdded} historical added`;
         const stamp = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
         if (statusEl) statusEl.textContent = `Synced ${stamp} · ${summary}`;
-        if (showAlert) alert(summary);
+        if (showAlert) toast.info(summary, 'Sync Complete');
         await loadOrders();
       } catch (e) {
         console.error('sync failed', e);
@@ -1018,23 +1274,23 @@
 
     async function backfillFields() {
       if (!APPS_SCRIPT_URL) {
-        alert('This only works once the Apps Script backend is connected.');
+        toast.warn('This only works once the Apps Script backend is connected.', 'Backend Required');
         return;
       }
       if (!confirm('This will fill in missing GSTIN, vehicle, invoice, and doc-link details from Purchase Form, without changing any existing data. Continue?')) return;
       const result = await apiCall({ action: 'backfill' });
-      alert(`Backfill complete. ${result.updated || 0} orders checked and updated.`);
+      toast.success(`Backfill complete. ${result.updated || 0} orders checked and updated.`, 'Backfill Complete');
       await loadOrders();
     }
 
     async function dedupeOrders() {
       if (!APPS_SCRIPT_URL) {
-        alert('This only works once the Apps Script backend is connected.');
+        toast.warn('This only works once the Apps Script backend is connected.', 'Backend Required');
         return;
       }
       if (!confirm('This will remove duplicate PO rows, keeping the most complete version of each. Continue?')) return;
       const result = await apiCall({ action: 'dedupe' });
-      alert(`Cleaned up. ${result.totalUnique || 0} unique orders remain.`);
+      toast.success(`Cleaned up. ${result.totalUnique || 0} unique orders remain.`, 'Duplicates Cleaned');
       await loadOrders();
     }
 
@@ -1618,7 +1874,7 @@
       pendingDocs[orderId][stepKey] = pendingDocs[orderId][stepKey] || {};
       const existing = [].concat(pendingDocs[orderId][stepKey][docLabel] || []);
       if (existing.length + files.length > MAX_FILES_PER_DOC) {
-        alert(`Max ${MAX_FILES_PER_DOC} files allowed for ${docLabel}. Already selected: ${existing.length}.`);
+        toast.warn(`Max ${MAX_FILES_PER_DOC} files allowed for ${docLabel}. Already selected: ${existing.length}.`, 'File Limit');
         evt.target.value = '';
         return;
       }
@@ -1655,13 +1911,13 @@
       try {
         const key = `doc:${orderId}:${stepKey}:${docLabel}` + (fileIndex ? `:${fileIndex}` : '');
         const r = await window.storage.get(key, false);
-        if (!r) { alert('Document not found'); return; }
+        if (!r) { toast.error('Document not found in storage.', 'Document Not Found'); return; }
         const res = await fetch(r.value);
         const blob = await res.blob();
         const blobUrl = URL.createObjectURL(blob);
         window.open(blobUrl, '_blank');
       } catch (e) {
-        alert('Could not load the document');
+        toast.error('Could not load the document file.', 'Document Error');
       }
     }
 
@@ -1704,7 +1960,7 @@
           if (el && el.value !== '') o.steps.PO3[field] = ['invoiceCreditDays', 'invoiceAmount', 'insurance', 'freight'].includes(field) ? parseFloat(el.value) : el.value;
         });
         if (o.steps.PO3.driverNumber && !/^\d{10}$/.test(o.steps.PO3.driverNumber)) {
-          alert('Driver mobile number must be exactly 10 digits.');
+          toast.warn('Driver mobile number must be exactly 10 digits.', 'Invalid Phone Number');
           return;
         }
       }
@@ -1720,11 +1976,11 @@
         const el = document.getElementById(`fld-${orderId}-PO6-ewayBillNumber`);
         const val = el ? el.value.trim() : '';
         if (!val) {
-          alert('E-Way Bill Number is mandatory. Please enter a valid 16-digit E-Way Bill Number.');
+          toast.warn('E-Way Bill Number is mandatory. Please enter a valid 16-digit number.', 'E-Way Bill Required');
           return;
         }
         if (!/^\d{16}$/.test(val)) {
-          alert('E-Way Bill Number must be exactly 16 digits.');
+          toast.warn('E-Way Bill Number must be exactly 16 digits (numeric only).', 'Invalid E-Way Bill No.');
           return;
         }
         o.steps.PO6.ewayBillNumber = val;
@@ -1737,7 +1993,7 @@
       const mandatory = MANDATORY_DOCS[stepKey] || [];
       const missingMandatory = missing.filter(d => mandatory.includes(d));
       if (missingMandatory.length) {
-        alert(`${missingMandatory.join(', ')} is mandatory. Please upload it before marking this step done.`);
+        toast.warn(`${missingMandatory.join(', ')} is mandatory. Please upload it before marking this step done.`, 'Missing Document');
         return;
       }
       const missingOptional = missing.filter(d => !mandatory.includes(d));
@@ -1763,7 +2019,7 @@
         if (saved.length) docsFlag[d] = { name: saved[0].name, url: saved[0].url, files: saved };
       }
       if (failedUploads.length) {
-        alert(`Could not upload: ${failedUploads.join(', ')}. Please check your connection and try again before marking this step done.`);
+        toast.error(`Could not upload: ${failedUploads.join(', ')}. Please check your connection and try again.`, 'Upload Error');
         return;
       }
 
@@ -1786,9 +2042,10 @@
 
       const saved = await saveOrder(o);
       if (!saved) {
-        alert(`"${stepDef.label}" could not be saved to the server. Please check your connection and click "Mark done" again to retry.`);
+        toast.error(`"${stepDef.label}" could not be saved to the server. Please check your connection and click "Mark done" again.`, 'Save Error');
         return;
       }
+      toast.success(`${o.id}: Step "${stepDef.label}" marked done!`, 'Step Completed');
       clearDrafts(orderId, stepKey);
       render(true);
     }
@@ -1807,7 +2064,7 @@
         o.steps.PO6.ewayBillNumber = '';
       } else {
         if (!/^\d{16}$/.test(val)) {
-          alert('Invalid E-Way Bill Number! It must be exactly 16 digits (numeric only).');
+          toast.warn('Invalid E-Way Bill Number! It must be exactly 16 digits (numeric only).', 'Validation Error');
           return;
         }
         o.steps.PO6.ewayBillNumber = val;
@@ -1815,9 +2072,10 @@
       const saved = await saveOrder(o);
       if (saved) {
         try { localStorage.setItem('purchaseFmsOrders', JSON.stringify(orders)); } catch (e) { }
+        toast.success(val ? `${orderId}: E-Way Bill No. updated to ${val}` : `${orderId}: E-Way Bill No. cleared`, 'E-Way Bill Saved');
         render(true);
       } else {
-        alert('Could not save E-Way Bill Number to server. Please check your connection.');
+        toast.error('Could not save E-Way Bill Number to server. Please check your connection.', 'Save Error');
       }
     }
 
