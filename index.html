@@ -652,7 +652,7 @@
         <img src="logo.png" alt="Satija Paper logo" style="height:48px; width:48px; object-fit:contain;">
         <div>
           <h1>Purchase order tracker</h1>
-          <div class="sub" style="margin-top:2px;">Build: 2026-10-15-v7</div>
+          <div class="sub" style="margin-top:2px;">Build: 2026-10-15-v8</div>
         </div>
       </div>
       <div style="display:flex; gap:8px; align-items:center;">
@@ -1167,12 +1167,20 @@
       let base = orders;
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
-        return base.filter(o => o.id.toLowerCase().includes(q) || o.mill.toLowerCase().includes(q) || fmtPoDate(o.poDate, o.createdAt).toLowerCase().includes(q));
+        return base.filter(o =>
+          o.id.toLowerCase().includes(q) ||
+          o.mill.toLowerCase().includes(q) ||
+          fmtPoDate(o.poDate, o.createdAt).toLowerCase().includes(q) ||
+          ((o.steps && o.steps.PO6 && o.steps.PO6.ewayBillNumber) || '').toLowerCase().includes(q)
+        );
       }
       const done = base.filter(o => currentStepIndex(o) >= STEPS.length);
       const notDone = base.filter(o => currentStepIndex(o) < STEPS.length);
       if (currentUser === 'all') return adminTab === 'completed' ? done : notDone;
-      return notDone.filter(o => STEPS[currentStepIndex(o)].doerEmails.includes(currentUser));
+      return notDone.filter(o => {
+        const idx = currentStepIndex(o);
+        return idx < STEPS.length && STEPS[idx].doerEmails.includes(currentUser);
+      });
     }
 
     function setAdminTab(tab) {
@@ -1402,7 +1410,10 @@
         let anyWork = false;
         myStepKeys.forEach(stepKey => {
           const stepDef = STEPS.find(s => s.key === stepKey);
-          const forStep = vis.filter(o => STEPS[currentStepIndex(o)].key === stepKey);
+          const forStep = vis.filter(o => {
+            const i = currentStepIndex(o);
+            return i < STEPS.length && STEPS[i].key === stepKey;
+          });
           if (forStep.length === 0) return;
           anyWork = true;
           html += `<div style="margin:22px 0 10px; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint); font-weight:600;">${stepKey} \u00b7 ${stepDef.label} <span class="mono" style="text-transform:none; letter-spacing:0;">(${forStep.length})</span></div>`;
@@ -1467,7 +1478,7 @@
       const ewayNo = (o.steps && o.steps.PO6 && o.steps.PO6.ewayBillNumber) || '';
       const orderInfoRows = [
         ['PO date', poDateStr],
-        ['E-Way Bill No.', ewayNo ? `<span class="mono" style="font-weight:600;">${ewayNo}</span>` : '—'],
+        ['E-Way Bill No.', (ewayNo ? `<span class="mono" style="font-weight:600; color:var(--accent-ink);">${ewayNo}</span>` : '<span style="color:var(--ink-faint); font-style:italic;">Not entered</span>') + ` <button class="btn ghost small" style="padding:1px 6px; font-size:10px; margin-left:6px;" onclick="promptUpdateEwayBill('${o.id}')">${ewayNo ? 'Edit' : '+ Enter'}</button>`],
         ['GSTIN', o.gstin], ['Address', o.address], ['Phone', o.phone],
         ['Contact person', o.contactPerson], ['Payment terms', o.paymentTerms],
         ['Credit days', o.creditDays], ['Delivery destination', o.deliveryDestination],
@@ -1531,14 +1542,14 @@
         } else if (s.key === 'PO4') {
           const rows = [['Lead time', st.leadTime], ['Driver status', st.driverStatus]].filter(([, v]) => v);
           if (rows.length) extraFieldsHtml = `<div class="ts" style="margin-top:4px; line-height:1.6;">${rows.map(([k, v]) => `${k}: ${v}`).join('<br>')}</div>`;
-        } else if (s.key === 'PO6') {
+        } else if (!naSkip && s.key === 'PO6') {
           const val = st.ewayBillNumber || '';
           extraFieldsHtml = `
-            <div class="ts" style="margin-top:6px; line-height:1.5; padding:6px 8px; background:var(--bg); border-radius:6px; border:1px solid var(--border);">
-              <div style="font-size:10px; color:var(--ink-muted); text-transform:uppercase; font-weight:600; letter-spacing:0.02em;">E-Way Bill No. (16 digits)</div>
-              <div style="display:flex; align-items:center; justify-content:space-between; gap:4px; margin-top:3px;">
-                <span class="mono" style="font-weight:600; font-size:12px; color:var(--ink);">${val ? val : '<span style="color:var(--ink-faint); font-weight:normal;">Not added yet</span>'}</span>
-                <button class="btn ghost small" style="padding:1px 7px; font-size:10px;" onclick="promptUpdateEwayBill('${o.id}')">${val ? 'Edit' : '+ Enter No.'}</button>
+            <div class="ts" style="margin-top:6px; line-height:1.5; padding:8px 10px; background:#F8FAF6; border-radius:6px; border:1px solid #D6DDD0;">
+              <div style="font-size:10.5px; color:var(--ink-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.03em;">E-Way Bill No. (16 digits)</div>
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:6px; margin-top:4px;">
+                <span class="mono" style="font-weight:600; font-size:12.5px; color:var(--ink);">${val ? val : '<span style="color:var(--ink-faint); font-weight:normal; font-style:italic;">Not added yet</span>'}</span>
+                <button class="btn ghost small" style="padding:2px 8px; font-size:11px;" onclick="promptUpdateEwayBill('${o.id}')">${val ? 'Edit No.' : '+ Enter No.'}</button>
               </div>
             </div>`;
         }
