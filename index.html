@@ -948,7 +948,7 @@
         <img src="logo.png" alt="Satija Paper logo" style="height:48px; width:48px; object-fit:contain;">
         <div>
           <h1>Purchase order tracker</h1>
-          <div class="sub" style="margin-top:2px;">Build: 2026-10-15-v10</div>
+          <div class="sub" style="margin-top:2px;">Build: 2026-10-15-v11</div>
         </div>
       </div>
       <div style="display:flex; gap:8px; align-items:center;">
@@ -1754,8 +1754,8 @@
       const po4Fields = s.key === 'PO4' ? `<div class="doc-row"><span>Driver status</span><input type="text" id="fld-${o.id}-PO4-driverStatus" oninput="noteDraft(this)"></div>` : '';
       const po6Fields = s.key === 'PO6' ? `
         <div class="doc-row" style="background:#FFF9EB; padding:8px 10px; border-radius:6px; border:1px solid #FFE0A3; margin:8px 0;">
-          <span style="font-weight:600; color:#7A4100; font-size:12.5px;">E-Way Bill No. (16 digits) *</span>
-          <input type="text" id="fld-${o.id}-PO6-ewayBillNumber" maxlength="16" pattern="[0-9]{16}" inputmode="numeric" placeholder="Enter 16-digit E-Way Bill Number" value="${(o.steps.PO6 && o.steps.PO6.ewayBillNumber) || ''}" oninput="this.value=this.value.replace(/[^0-9]/g,'');noteDraft(this)" style="font-family:'JetBrains Mono',monospace; font-weight:600; font-size:13px; background:#fff;">
+          <span style="font-weight:600; color:#7A4100; font-size:12.5px;">E-Way Bill No. (12 digits) *</span>
+          <input type="text" id="fld-${o.id}-PO6-ewayBillNumber" maxlength="12" pattern="[0-9]{12}" inputmode="numeric" placeholder="Enter 12-digit E-Way Bill Number" value="${(o.steps.PO6 && o.steps.PO6.ewayBillNumber) || ''}" oninput="this.value=this.value.replace(/[^0-9]/g,'');noteDraft(this)" style="font-family:'JetBrains Mono',monospace; font-weight:600; font-size:13px; background:#fff;">
         </div>` : '';
 
       const poDateStr = fmtPoDate(o.poDate, o.createdAt);
@@ -1937,7 +1937,7 @@
           const val = st.ewayBillNumber || '';
           extraFieldsHtml = `
             <div class="ts" style="margin-top:6px; line-height:1.5; padding:8px 10px; background:#F8FAF6; border-radius:6px; border:1px solid #D6DDD0;">
-              <div style="font-size:10.5px; color:var(--ink-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.03em;">E-Way Bill No. (16 digits)</div>
+              <div style="font-size:10.5px; color:var(--ink-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.03em;">E-Way Bill No. (12 digits)</div>
               <div style="display:flex; align-items:center; justify-content:space-between; gap:6px; margin-top:4px;">
                 <span class="mono" style="font-weight:600; font-size:12.5px; color:var(--ink);">${val ? val : '<span style="color:var(--ink-faint); font-weight:normal; font-style:italic;">Not added yet</span>'}</span>
                 <button class="btn ghost small" style="padding:2px 8px; font-size:11px;" onclick="promptUpdateEwayBill('${o.id}')">${val ? 'Edit No.' : '+ Enter No.'}</button>
@@ -1959,8 +1959,8 @@
           const po4Fields = s.key === 'PO4' ? `<div class="doc-row"><span>Driver status</span><input type="text" id="fld-${o.id}-PO4-driverStatus" oninput="noteDraft(this)"></div>` : '';
           const po6Fields = s.key === 'PO6' ? `
             <div class="doc-row" style="background:#FFF9EB; padding:8px 10px; border-radius:6px; border:1px solid #FFE0A3; margin:8px 0;">
-              <span style="font-weight:600; color:#7A4100; font-size:12.5px;">E-Way Bill No. (16 digits) *</span>
-              <input type="text" id="fld-${o.id}-PO6-ewayBillNumber" maxlength="16" pattern="[0-9]{16}" inputmode="numeric" placeholder="Enter 16-digit E-Way Bill Number" value="${(o.steps.PO6 && o.steps.PO6.ewayBillNumber) || ''}" oninput="this.value=this.value.replace(/[^0-9]/g,'');noteDraft(this)" style="font-family:'JetBrains Mono',monospace; font-weight:600; font-size:13px; background:#fff;">
+              <span style="font-weight:600; color:#7A4100; font-size:12.5px;">E-Way Bill No. (12 digits) *</span>
+              <input type="text" id="fld-${o.id}-PO6-ewayBillNumber" maxlength="12" pattern="[0-9]{12}" inputmode="numeric" placeholder="Enter 12-digit E-Way Bill Number" value="${(o.steps.PO6 && o.steps.PO6.ewayBillNumber) || ''}" oninput="this.value=this.value.replace(/[^0-9]/g,'');noteDraft(this)" style="font-family:'JetBrains Mono',monospace; font-weight:600; font-size:13px; background:#fff;">
             </div>` : '';
           currentPanelHtml = `<div style="margin-top:14px; padding:14px 16px; border:1px solid var(--border); border-radius:10px; background:var(--surface);">
           <h4 style="margin:0 0 4px;">${s.key} &middot; ${s.label} &mdash; confirm</h4>
@@ -2112,11 +2112,11 @@
         const el = document.getElementById(`fld-${orderId}-PO6-ewayBillNumber`);
         const val = el ? el.value.trim() : '';
         if (!val) {
-          toast.warn('E-Way Bill Number is mandatory. Please enter a valid 16-digit number.', 'E-Way Bill Required');
+          toast.warn('E-Way Bill Number is mandatory. Please enter a valid 12-digit number.', 'E-Way Bill Required');
           return;
         }
-        if (!/^\d{16}$/.test(val)) {
-          toast.warn('E-Way Bill Number must be exactly 16 digits (numeric only).', 'Invalid E-Way Bill No.');
+        if (!/^\d{12}$/.test(val)) {
+          toast.warn('E-Way Bill Number must be exactly 12 digits (numeric only).', 'Invalid E-Way Bill No.');
           return;
         }
         o.steps.PO6.ewayBillNumber = val;
@@ -2220,12 +2220,12 @@
           </div>
           <div class="custom-modal-body">
             <label style="display:block; font-size:11.5px; font-weight:700; color:var(--ink-muted); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:6px;">
-              16-Digit Number *
+              12-Digit Number *
             </label>
-            <input type="text" id="modalEwayInput" class="custom-modal-input" maxlength="16" pattern="[0-9]{16}" inputmode="numeric" placeholder="Enter 16-digit E-Way Bill No." value="${current}">
+            <input type="text" id="modalEwayInput" class="custom-modal-input" maxlength="12" pattern="[0-9]{12}" inputmode="numeric" placeholder="Enter 12-digit E-Way Bill No." value="${current}">
             <div class="custom-modal-counter">
               <span id="modalEwayHint" style="color:var(--ink-muted); font-weight:500;"></span>
-              <span id="modalEwayDigits" class="mono" style="font-weight:600;">${current.length}/16</span>
+              <span id="modalEwayDigits" class="mono" style="font-weight:600;">${current.length}/12</span>
             </div>
           </div>
           <div class="custom-modal-actions">
@@ -2245,10 +2245,10 @@
       function updateCounter() {
         inputEl.value = inputEl.value.replace(/[^0-9]/g, '');
         const len = inputEl.value.length;
-        counterEl.textContent = `${len}/16`;
-        if (len === 16) {
+        counterEl.textContent = `${len}/12`;
+        if (len === 12) {
           counterEl.style.color = 'var(--accent)';
-          hintEl.textContent = '✓ 16 digits complete';
+          hintEl.textContent = '✓ 12 digits complete';
           hintEl.style.color = 'var(--accent)';
         } else if (len === 0) {
           counterEl.style.color = 'var(--ink-muted)';
@@ -2256,7 +2256,7 @@
           hintEl.style.color = 'var(--ink-muted)';
         } else {
           counterEl.style.color = 'var(--warn)';
-          hintEl.textContent = `${16 - len} more digit${16 - len === 1 ? '' : 's'} required`;
+          hintEl.textContent = `${12 - len} more digit${12 - len === 1 ? '' : 's'} required`;
           hintEl.style.color = 'var(--warn)';
         }
       }
@@ -2310,12 +2310,12 @@
       const inputEl = document.getElementById('modalEwayInput');
       const val = inputEl ? inputEl.value.trim() : '';
       if (!val) {
-        toast.warn('Please enter 16 digits, or click "Clear Number" to remove.', 'Empty Input');
+        toast.warn('Please enter 12 digits, or click "Clear Number" to remove.', 'Empty Input');
         inputEl && inputEl.focus();
         return;
       }
-      if (!/^\d{16}$/.test(val)) {
-        toast.warn('E-Way Bill Number must be exactly 16 digits (numeric only).', '16 Digits Required');
+      if (!/^\d{12}$/.test(val)) {
+        toast.warn('E-Way Bill Number must be exactly 12 digits (numeric only).', '12 Digits Required');
         inputEl && inputEl.focus();
         return;
       }
