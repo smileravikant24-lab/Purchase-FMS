@@ -2429,10 +2429,11 @@
       if (!signedIn) restoreSession();
     });
     loadOrders();
-    // Keep the Sheet in sync automatically - once shortly after opening, then
-    // every few minutes while the tab stays open. No more manual clicking.
-    setTimeout(() => runSync(false), 4000);
-    setInterval(() => runSync(false), 5 * 60 * 1000);
+    // Read-only refresh for UI task cards (does not write to or refresh Google Sheet).
+    // Sheet sync happens strictly when the user clicks 'Resync from Purchase Form'.
+    setInterval(() => {
+      if (!isUserEditing()) loadOrders();
+    }, 5 * 60 * 1000);
   </script>
 </body>
 
