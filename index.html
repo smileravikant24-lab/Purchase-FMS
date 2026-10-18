@@ -1801,7 +1801,7 @@
         </div>
         <div class="doc-row" style="background:#F0F7F4; padding:8px 10px; border-radius:6px; border:1px solid #C2E2D6; margin:8px 0;">
           <span style="font-weight:600; color:#085041; font-size:12.5px;">Confirmation of Delivery Date *</span>
-          <input type="date" id="fld-${o.id}-PO5-deliveryConfirmationDate" value="${(o.steps.PO5 && o.steps.PO5.deliveryConfirmationDate) || o.deliveryDate || ''}" oninput="noteDraft(this)" style="font-family:inherit; font-weight:600; font-size:13px; background:#fff; padding:6px 10px; border:1px solid var(--border); border-radius:6px;">
+          <input type="date" id="fld-${o.id}-PO5-deliveryConfirmationDate" value="${(o.steps.PO5 && o.steps.PO5.deliveryConfirmationDate) || ''}" oninput="noteDraft(this)" style="font-family:inherit; font-weight:600; font-size:13px; background:#fff; padding:6px 10px; border:1px solid var(--border); border-radius:6px;">
         </div>` : '';
 
       const poDateStr = fmtPoDate(o.poDate, o.createdAt);
@@ -1983,7 +1983,7 @@
           if (rows.length) extraFieldsHtml = `<div class="ts" style="margin-top:4px; line-height:1.6;">${rows.map(([k, v]) => `${k}: ${v}`).join('<br>')}</div>`;
         } else if (!naSkip && s.key === 'PO5') {
           const ewayVal = st.ewayBillNumber || '';
-          const delivVal = st.deliveryConfirmationDate || o.deliveryDate || '';
+          const delivVal = st.deliveryConfirmationDate || '';
           extraFieldsHtml = `
             <div class="ts" style="margin-top:6px; line-height:1.5; padding:8px 10px; background:#F8FAF6; border-radius:6px; border:1px solid #D6DDD0;">
               <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
@@ -2019,7 +2019,7 @@
             </div>
             <div class="doc-row" style="background:#F0F7F4; padding:8px 10px; border-radius:6px; border:1px solid #C2E2D6; margin:8px 0;">
               <span style="font-weight:600; color:#085041; font-size:12.5px;">Confirmation of Delivery Date *</span>
-              <input type="date" id="fld-${o.id}-PO5-deliveryConfirmationDate" value="${(o.steps.PO5 && o.steps.PO5.deliveryConfirmationDate) || o.deliveryDate || ''}" oninput="noteDraft(this)" style="font-family:inherit; font-weight:600; font-size:13px; background:#fff; padding:6px 10px; border:1px solid var(--border); border-radius:6px;">
+              <input type="date" id="fld-${o.id}-PO5-deliveryConfirmationDate" value="${(o.steps.PO5 && o.steps.PO5.deliveryConfirmationDate) || ''}" oninput="noteDraft(this)" style="font-family:inherit; font-weight:600; font-size:13px; background:#fff; padding:6px 10px; border:1px solid var(--border); border-radius:6px;">
             </div>` : '';
           currentPanelHtml = `<div style="margin-top:14px; padding:14px 16px; border:1px solid var(--border); border-radius:10px; background:var(--surface);">
           <h4 style="margin:0 0 4px;">${s.key} &middot; ${s.label} &mdash; confirm</h4>
@@ -2188,7 +2188,6 @@
           return;
         }
         o.steps.PO5.deliveryConfirmationDate = delivVal;
-        o.deliveryDate = delivVal;
       }
 
       const uploaded = (pendingDocs[orderId] && pendingDocs[orderId][stepKey]) || {};

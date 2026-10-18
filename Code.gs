@@ -378,7 +378,7 @@ function regenerateFlatView() {
     const godownUrl = docUrl(p5, 'Godown Slip');
     const grCopyUrl = docUrl(p5, 'GR Copy') || docUrl(p5, 'GR Signed Copy') || docUrl(p6, 'GR Copy');
     const ewayNumber = p5.ewayBillNumber || p6.ewayBillNumber || '';
-    const deliveryConfDate = p5.deliveryConfirmationDate || o.deliveryDate || '';
+    const deliveryConfDate = p5.deliveryConfirmationDate || '';
 
     (o.items || []).forEach(it => {
       rows.push([
