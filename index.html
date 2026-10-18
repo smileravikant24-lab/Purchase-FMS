@@ -948,13 +948,15 @@
         <img src="logo.png" alt="Satija Paper logo" style="height:48px; width:48px; object-fit:contain;">
         <div>
           <h1>Purchase order tracker</h1>
-          <div class="sub" style="margin-top:2px;">Build: 2026-10-15-v11</div>
+          <div class="sub" style="margin-top:2px;">Build: 2026-10-19-v12</div>
         </div>
       </div>
       <div style="display:flex; gap:8px; align-items:center;">
         <span class="ts" id="syncStatus" style="color:var(--ink-faint); font-size:11px;"></span>
         <button class="btn ghost small" onclick="resyncSeed()" title="Force a sync right now">&#8635; Resync from
           Purchase Form</button>
+        <button class="btn ghost small" onclick="initSheetColumns()"
+          title="Rearrange columns in Google Sheet Orders (Readable) according to new PO5 layout">&#9638; Rearrange Sheet Columns</button>
         <button class="btn ghost small" onclick="dedupeOrders()"
           title="Remove duplicate PO rows, keeping the most complete version">Clean up duplicates</button>
         <button class="btn ghost small" onclick="backfillFields()"
@@ -1097,8 +1099,7 @@
       { key: 'PO2', label: 'Mill confirms', hours: 24, doerName: 'Mr. Sandeep Dhawan', doerEmails: ['satijapaper@gmail.com'], docs: ['Confirmation PDF'] },
       { key: 'PO3', label: 'Dispatch + invoice', hours: 48, doerName: 'Mr. Sandeep Dhawan', doerEmails: ['satijapaper@gmail.com'], docs: ['Packing List', 'Invoice PDF'] },
       { key: 'PO4', label: 'Driver follow-up', hours: 72, doerName: 'Mr. Sandeep Dhawan', doerEmails: ['satijapaper@gmail.com'], docs: [] },
-      { key: 'PO5', label: 'Warehouse delivery', hours: 96, doerName: 'Mr. Sandeep Dhawan', doerEmails: ['satijapaper@gmail.com'], docs: ['Godown Slip', 'GR Signed Copy'] },
-      { key: 'PO6', label: 'Transporter + GR', hours: 120, doerName: 'Mr. Sandeep Dhawan', doerEmails: ['satijapaper@gmail.com'], docs: ['E-Way Bill', 'GR Copy'] },
+      { key: 'PO5', label: 'Warehouse delivery', hours: 96, doerName: 'Mr. Sandeep Dhawan', doerEmails: ['satijapaper@gmail.com'], docs: ['Godown Slip', 'GR Copy'] }
     ];
   
     const MANDATORY_DOCS = { PO2: ['Confirmation PDF'], PO3: ['Invoice PDF'] };
@@ -1333,6 +1334,23 @@
               }
             });
           }
+          // Seamlessly migrate any existing PO6 data (E-Way Bill No., GR Copy, Delivery Date) into PO5
+          if (o.steps && o.steps.PO6) {
+            if (o.steps.PO5) {
+              if (o.steps.PO6.ewayBillNumber && !o.steps.PO5.ewayBillNumber) {
+                o.steps.PO5.ewayBillNumber = o.steps.PO6.ewayBillNumber;
+              }
+              if (o.steps.PO6.docs) {
+                o.steps.PO5.docs = o.steps.PO5.docs || {};
+                if (o.steps.PO6.docs['GR Copy'] && !o.steps.PO5.docs['GR Copy']) {
+                  o.steps.PO5.docs['GR Copy'] = o.steps.PO6.docs['GR Copy'];
+                }
+                if (o.steps.PO6.docs['E-Way Bill'] && !o.steps.PO5.docs['E-Way Bill']) {
+                  o.steps.PO5.docs['E-Way Bill'] = o.steps.PO6.docs['E-Way Bill'];
+                }
+              }
+            }
+          }
           return o;
         }).sort((a, b) => poNumber(b.id) - poNumber(a.id));
 
@@ -1430,10 +1448,34 @@
       await loadOrders();
     }
 
+    async function initSheetColumns() {
+      if (!APPS_SCRIPT_URL) {
+        toast.warn('This only works once the Apps Script backend is connected.', 'Backend Required');
+        return;
+      }
+      if (!confirm('This will reorganize and update column headers in "Orders (Readable)" according to the new PO5 structure (Godown Slip, GR Copy, E-Way Bill Number, Confirmation of Delivery Date). Continue?')) return;
+      const statusEl = document.getElementById('syncStatus');
+      if (statusEl) statusEl.textContent = 'Rearranging columns…';
+      try {
+        const result = await apiCall({ action: 'initColumns' });
+        if (result && result.error) {
+          toast.error(result.error, 'Reorganize Failed');
+          if (statusEl) statusEl.textContent = 'Column rearrange failed';
+        } else {
+          toast.success(`Sheet columns rearranged successfully! (${result.columns || 0} columns, ${result.rows || 0} rows).`, 'Sheet Columns Reorganized');
+          if (statusEl) statusEl.textContent = 'Columns rearranged';
+          await loadOrders();
+        }
+      } catch (e) {
+        console.error('initColumns error', e);
+        toast.error('Could not connect to Apps Script. Please verify deployment.', 'Error');
+      }
+    }
+
     async function saveOrder(o) {
       try {
         if (o.steps && o.steps.PO3 && o.steps.PO3.transferStatus === 'Yes') {
-          ['PO4', 'PO5', 'PO6'].forEach(k => {
+          ['PO4', 'PO5'].forEach(k => {
             if (!o.steps[k]) o.steps[k] = {};
             o.steps[k].status = 'skipped';
             o.steps[k].planned = null;
@@ -1506,7 +1548,7 @@
       return (o.items || []).reduce((s, i) => s + (Number(i.orderQty) || 0) * (Number(i.rate) || 0), 0);
     }
     function isTransferNA(o, key) {
-      return (key === 'PO4' || key === 'PO5' || key === 'PO6')
+      return (key === 'PO4' || key === 'PO5')
         && o && o.steps && o.steps.PO3 && o.steps.PO3.transferStatus === 'Yes';
     }
     function stepIsDone(o, key) {
@@ -1562,7 +1604,7 @@
           o.id.toLowerCase().includes(q) ||
           o.mill.toLowerCase().includes(q) ||
           fmtPoDate(o.poDate, o.createdAt).toLowerCase().includes(q) ||
-          ((o.steps && o.steps.PO6 && o.steps.PO6.ewayBillNumber) || '').toLowerCase().includes(q)
+          ((o.steps && o.steps.PO5 && o.steps.PO5.ewayBillNumber) || (o.steps && o.steps.PO6 && o.steps.PO6.ewayBillNumber) || '').toLowerCase().includes(q)
         );
       }
       const done = base.filter(o => currentStepIndex(o) >= STEPS.length);
@@ -1752,10 +1794,14 @@
       }).join('');
       const po3Section = s.key === 'PO3' ? po3ConfirmSection(o) : '';
       const po4Fields = s.key === 'PO4' ? `<div class="doc-row"><span>Driver status</span><input type="text" id="fld-${o.id}-PO4-driverStatus" oninput="noteDraft(this)"></div>` : '';
-      const po6Fields = s.key === 'PO6' ? `
+      const po5Fields = s.key === 'PO5' ? `
         <div class="doc-row" style="background:#FFF9EB; padding:8px 10px; border-radius:6px; border:1px solid #FFE0A3; margin:8px 0;">
           <span style="font-weight:600; color:#7A4100; font-size:12.5px;">E-Way Bill No. (12 digits) *</span>
-          <input type="text" id="fld-${o.id}-PO6-ewayBillNumber" maxlength="12" pattern="[0-9]{12}" inputmode="numeric" placeholder="Enter 12-digit E-Way Bill Number" value="${(o.steps.PO6 && o.steps.PO6.ewayBillNumber) || ''}" oninput="this.value=this.value.replace(/[^0-9]/g,'');noteDraft(this)" style="font-family:'JetBrains Mono',monospace; font-weight:600; font-size:13px; background:#fff;">
+          <input type="text" id="fld-${o.id}-PO5-ewayBillNumber" maxlength="12" pattern="[0-9]{12}" inputmode="numeric" placeholder="Enter 12-digit E-Way Bill Number" value="${(o.steps.PO5 && o.steps.PO5.ewayBillNumber) || (o.steps.PO6 && o.steps.PO6.ewayBillNumber) || ''}" oninput="this.value=this.value.replace(/[^0-9]/g,'');noteDraft(this)" style="font-family:'JetBrains Mono',monospace; font-weight:600; font-size:13px; background:#fff;">
+        </div>
+        <div class="doc-row" style="background:#F0F7F4; padding:8px 10px; border-radius:6px; border:1px solid #C2E2D6; margin:8px 0;">
+          <span style="font-weight:600; color:#085041; font-size:12.5px;">Confirmation of Delivery Date *</span>
+          <input type="date" id="fld-${o.id}-PO5-deliveryConfirmationDate" value="${(o.steps.PO5 && o.steps.PO5.deliveryConfirmationDate) || o.deliveryDate || ''}" oninput="noteDraft(this)" style="font-family:inherit; font-weight:600; font-size:13px; background:#fff; padding:6px 10px; border:1px solid var(--border); border-radius:6px;">
         </div>` : '';
 
       const poDateStr = fmtPoDate(o.poDate, o.createdAt);
@@ -1772,7 +1818,7 @@
     </div>
     <div class="task-sub">${o.mill}${plannedSub ? ' &middot; ' + plannedSub : ''}</div>
     <div class="task-items">${itemsLine}</div>
-    ${po3Section}${po4Fields}${po6Fields}${docInputs}
+    ${po3Section}${po4Fields}${po5Fields}${docInputs}
     <button class="btn small" id="markdone-${o.id}-${s.key}" style="margin-top:8px;" onclick="completeStep('${o.id}','${s.key}')">Mark done</button>
   </div>`;
     }
@@ -1866,14 +1912,16 @@
       }
 
       const poDateStr = fmtPoDate(o.poDate, o.createdAt);
-      const ewayNo = (o.steps && o.steps.PO6 && o.steps.PO6.ewayBillNumber) || '';
+      const ewayNo = (o.steps && o.steps.PO5 && o.steps.PO5.ewayBillNumber) || (o.steps && o.steps.PO6 && o.steps.PO6.ewayBillNumber) || '';
+      const deliveryConf = (o.steps && o.steps.PO5 && o.steps.PO5.deliveryConfirmationDate) || '';
       const orderInfoRows = [
         ['PO date', poDateStr],
         ['E-Way Bill No.', (ewayNo ? `<span class="mono" style="font-weight:600; color:var(--accent-ink);">${ewayNo}</span>` : '<span style="color:var(--ink-faint); font-style:italic;">Not entered</span>') + ` <button class="btn ghost small" style="padding:1px 6px; font-size:10px; margin-left:6px;" onclick="promptUpdateEwayBill('${o.id}')">${ewayNo ? 'Edit' : '+ Enter'}</button>`],
+        ['Confirmation of Delivery Date', deliveryConf ? `<span class="mono" style="font-weight:600; color:var(--accent-ink);">${fmtPoDate(deliveryConf)}</span>` : '<span style="color:var(--ink-faint); font-style:italic;">Not confirmed yet</span>'],
         ['GSTIN', o.gstin], ['Address', o.address], ['Phone', o.phone],
         ['Contact person', o.contactPerson], ['Payment terms', o.paymentTerms],
         ['Credit days', o.creditDays], ['Delivery destination', o.deliveryDestination],
-        ['Delivery date', o.deliveryDate], ['Remarks', o.remarks],
+        ['Delivery date (Quote)', o.deliveryDate], ['Remarks', o.remarks],
         ['Transport name (Purchase Form)', o.transportName], ['Transporter number', o.transporterNumber],
         ['Vehicle number (Purchase Form)', o.vehicleNumber], ['Agreed transport rate', o.agreedTransportRate],
         ['Freight paid by us', o.freightPaidByUs]
@@ -1933,14 +1981,21 @@
         } else if (s.key === 'PO4') {
           const rows = [['Lead time', st.leadTime], ['Driver status', st.driverStatus]].filter(([, v]) => v);
           if (rows.length) extraFieldsHtml = `<div class="ts" style="margin-top:4px; line-height:1.6;">${rows.map(([k, v]) => `${k}: ${v}`).join('<br>')}</div>`;
-        } else if (!naSkip && s.key === 'PO6') {
-          const val = st.ewayBillNumber || '';
+        } else if (!naSkip && s.key === 'PO5') {
+          const ewayVal = st.ewayBillNumber || '';
+          const delivVal = st.deliveryConfirmationDate || o.deliveryDate || '';
           extraFieldsHtml = `
             <div class="ts" style="margin-top:6px; line-height:1.5; padding:8px 10px; background:#F8FAF6; border-radius:6px; border:1px solid #D6DDD0;">
-              <div style="font-size:10.5px; color:var(--ink-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.03em;">E-Way Bill No. (12 digits)</div>
-              <div style="display:flex; align-items:center; justify-content:space-between; gap:6px; margin-top:4px;">
-                <span class="mono" style="font-weight:600; font-size:12.5px; color:var(--ink);">${val ? val : '<span style="color:var(--ink-faint); font-weight:normal; font-style:italic;">Not added yet</span>'}</span>
-                <button class="btn ghost small" style="padding:2px 8px; font-size:11px;" onclick="promptUpdateEwayBill('${o.id}')">${val ? 'Edit No.' : '+ Enter No.'}</button>
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
+                <div>
+                  <div style="font-size:10.5px; color:var(--ink-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.03em;">E-Way Bill No. (12 digits)</div>
+                  <div class="mono" style="font-weight:600; font-size:12.5px; color:var(--ink); margin-top:2px;">${ewayVal ? ewayVal : '<span style="color:var(--ink-faint); font-weight:normal; font-style:italic;">Not added yet</span>'}</div>
+                </div>
+                <button class="btn ghost small" style="padding:2px 8px; font-size:11px;" onclick="promptUpdateEwayBill('${o.id}')">${ewayVal ? 'Edit No.' : '+ Enter No.'}</button>
+              </div>
+              <div style="margin-top:6px; border-top:1px dashed #E2E8DC; padding-top:4px;">
+                <div style="font-size:10.5px; color:var(--ink-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.03em;">Confirmation of Delivery Date</div>
+                <div style="font-weight:600; font-size:12px; color:var(--ink); margin-top:2px;">${delivVal ? delivVal : '<span style="color:var(--ink-faint); font-weight:normal; font-style:italic;">Not confirmed yet</span>'}</div>
               </div>
             </div>`;
         }
@@ -1957,24 +2012,29 @@
           }).join('');
           const po3Section = s.key === 'PO3' ? po3ConfirmSection(o) : '';
           const po4Fields = s.key === 'PO4' ? `<div class="doc-row"><span>Driver status</span><input type="text" id="fld-${o.id}-PO4-driverStatus" oninput="noteDraft(this)"></div>` : '';
-          const po6Fields = s.key === 'PO6' ? `
+          const po5Fields = s.key === 'PO5' ? `
             <div class="doc-row" style="background:#FFF9EB; padding:8px 10px; border-radius:6px; border:1px solid #FFE0A3; margin:8px 0;">
               <span style="font-weight:600; color:#7A4100; font-size:12.5px;">E-Way Bill No. (12 digits) *</span>
-              <input type="text" id="fld-${o.id}-PO6-ewayBillNumber" maxlength="12" pattern="[0-9]{12}" inputmode="numeric" placeholder="Enter 12-digit E-Way Bill Number" value="${(o.steps.PO6 && o.steps.PO6.ewayBillNumber) || ''}" oninput="this.value=this.value.replace(/[^0-9]/g,'');noteDraft(this)" style="font-family:'JetBrains Mono',monospace; font-weight:600; font-size:13px; background:#fff;">
+              <input type="text" id="fld-${o.id}-PO5-ewayBillNumber" maxlength="12" pattern="[0-9]{12}" inputmode="numeric" placeholder="Enter 12-digit E-Way Bill Number" value="${(o.steps.PO5 && o.steps.PO5.ewayBillNumber) || ''}" oninput="this.value=this.value.replace(/[^0-9]/g,'');noteDraft(this)" style="font-family:'JetBrains Mono',monospace; font-weight:600; font-size:13px; background:#fff;">
+            </div>
+            <div class="doc-row" style="background:#F0F7F4; padding:8px 10px; border-radius:6px; border:1px solid #C2E2D6; margin:8px 0;">
+              <span style="font-weight:600; color:#085041; font-size:12.5px;">Confirmation of Delivery Date *</span>
+              <input type="date" id="fld-${o.id}-PO5-deliveryConfirmationDate" value="${(o.steps.PO5 && o.steps.PO5.deliveryConfirmationDate) || o.deliveryDate || ''}" oninput="noteDraft(this)" style="font-family:inherit; font-weight:600; font-size:13px; background:#fff; padding:6px 10px; border:1px solid var(--border); border-radius:6px;">
             </div>` : '';
           currentPanelHtml = `<div style="margin-top:14px; padding:14px 16px; border:1px solid var(--border); border-radius:10px; background:var(--surface);">
           <h4 style="margin:0 0 4px;">${s.key} &middot; ${s.label} &mdash; confirm</h4>
-          ${po3Section}${po4Fields}${po6Fields}${docInputs}
+          ${po3Section}${po4Fields}${po5Fields}${docInputs}
           <button class="btn small" id="markdone-${o.id}-${s.key}" style="margin-top:10px;" onclick="completeStep('${o.id}','${s.key}')">Mark done</button>
         </div>`;
-        } else if (!naSkip && st.status === 'done' && s.docs.length) {
-          const chips = s.docs.map(d => {
+        } else if (!naSkip && st.status === 'done') {
+          const docKeys = Array.from(new Set([...s.docs, ...Object.keys(st.docs || {})]));
+          const chips = docKeys.map(d => {
             const has = st.docs && st.docs[d];
             if (!has) return `<span class="doc-chip" style="opacity:.5;">${d} missing</span>`;
             const files = (has.files && has.files.length) ? has.files : [has];
             return files.map((f, fi) => `<a href="#" onclick="viewDoc('${o.id}','${s.key}','${d}',${fi});return false;" class="doc-chip">${d}${files.length > 1 ? ' ' + (fi + 1) : ''} &#8599;</a>`).join('');
           }).join('');
-          actionHtml = `<div style="margin-top:6px;">${chips}</div>`;
+          if (chips) actionHtml = `<div style="margin-top:6px;">${chips}</div>`;
         }
         stepsHtml += `<div class="${cls}"><div class="name">${s.key} \u00b7 ${s.label}</div><div class="ts" style="font-size:11px; color:var(--ink-faint); margin-top:2px;">${s.doerName}</div>${plannedLine}${doneLine}${extraFieldsHtml}${actionHtml}</div>`;
       });
@@ -2108,18 +2168,27 @@
           o.steps.PO4.leadTime = days + ' day' + (days === 1 ? '' : 's');
         }
       }
-      if (stepKey === 'PO6') {
-        const el = document.getElementById(`fld-${orderId}-PO6-ewayBillNumber`);
-        const val = el ? el.value.trim() : '';
-        if (!val) {
+      if (stepKey === 'PO5') {
+        const ewayEl = document.getElementById(`fld-${orderId}-PO5-ewayBillNumber`);
+        const ewayVal = ewayEl ? ewayEl.value.trim() : (o.steps.PO5 && o.steps.PO5.ewayBillNumber) || '';
+        if (!ewayVal) {
           toast.warn('E-Way Bill Number is mandatory. Please enter a valid 12-digit number.', 'E-Way Bill Required');
           return;
         }
-        if (!/^\d{12}$/.test(val)) {
+        if (!/^\d{12}$/.test(ewayVal)) {
           toast.warn('E-Way Bill Number must be exactly 12 digits (numeric only).', 'Invalid E-Way Bill No.');
           return;
         }
-        o.steps.PO6.ewayBillNumber = val;
+        o.steps.PO5.ewayBillNumber = ewayVal;
+
+        const delivEl = document.getElementById(`fld-${orderId}-PO5-deliveryConfirmationDate`);
+        const delivVal = delivEl ? delivEl.value.trim() : (o.steps.PO5 && o.steps.PO5.deliveryConfirmationDate) || '';
+        if (!delivVal) {
+          toast.warn('Confirmation of Delivery Date is mandatory. Please select the delivery date.', 'Delivery Date Required');
+          return;
+        }
+        o.steps.PO5.deliveryConfirmationDate = delivVal;
+        o.deliveryDate = delivVal;
       }
 
       const uploaded = (pendingDocs[orderId] && pendingDocs[orderId][stepKey]) || {};
@@ -2190,8 +2259,8 @@
       const o = orders.find(x => x.id === orderId);
       if (!o) return;
       if (!o.steps) o.steps = {};
-      if (!o.steps.PO6) o.steps.PO6 = { status: 'pending', planned: (o.createdAt || Date.now()) + 120 * 3600 * 1000 };
-      const current = o.steps.PO6.ewayBillNumber || '';
+      if (!o.steps.PO5) o.steps.PO5 = { status: 'pending', planned: (o.createdAt || Date.now()) + 96 * 3600 * 1000 };
+      const current = o.steps.PO5.ewayBillNumber || '';
 
       let backdrop = document.getElementById('ewayBillModalBackdrop');
       if (!backdrop) {
@@ -2291,10 +2360,10 @@
       const o = orders.find(x => x.id === orderId);
       if (!o) return;
       if (!o.steps) o.steps = {};
-      if (!o.steps.PO6) o.steps.PO6 = { status: 'pending', planned: (o.createdAt || Date.now()) + 120 * 3600 * 1000 };
+      if (!o.steps.PO5) o.steps.PO5 = { status: 'pending', planned: (o.createdAt || Date.now()) + 96 * 3600 * 1000 };
 
       if (isClear) {
-        o.steps.PO6.ewayBillNumber = '';
+        o.steps.PO5.ewayBillNumber = '';
         closeEwayBillModal();
         const saved = await saveOrder(o);
         if (saved) {
@@ -2326,7 +2395,7 @@
         saveBtn.textContent = 'Saving…';
       }
 
-      o.steps.PO6.ewayBillNumber = val;
+      o.steps.PO5.ewayBillNumber = val;
       closeEwayBillModal();
 
       const saved = await saveOrder(o);
