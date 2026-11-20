@@ -9,7 +9,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
     rel="stylesheet">
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://accounts.google.com/gsi/client" async defer onload="initGoogleSignIn()"></script>
   <style>
     :root {
       --bg: #F4F5F1;
@@ -948,7 +948,7 @@
         <img src="logo.png" alt="Satija Paper logo" style="height:48px; width:48px; object-fit:contain;">
         <div>
           <h1>Purchase order tracker</h1>
-          <div class="sub" style="margin-top:2px;">Build: 2026-10-19-v12</div>
+          <div class="sub" style="margin-top:2px;">Build: 2026-11-20-v13</div>
         </div>
       </div>
       <div style="display:flex; gap:8px; align-items:center;">
@@ -969,18 +969,29 @@
     </header>
 
     <div id="loginBanner"
-      style="display:flex; align-items:center; gap:10px; margin-bottom:18px; flex-wrap:wrap; padding:12px 14px; border:1px solid var(--border); border-radius:10px; background:var(--surface);">
-      <div id="signedOutView" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-        <span class="sub" style="margin:0; font-weight:600;">Sign in with your Google account:</span>
-        <div id="gSignInButton"></div>
+      style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; flex-wrap:wrap; padding:12px 16px; border:1px solid var(--border); border-radius:10px; background:var(--surface); box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+      <div id="signedOutView" style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; width:100%;">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <span class="sub" style="margin:0; font-weight:600; color:var(--ink);">Sign In:</span>
+          <div id="gSignInButton"></div>
+          <span id="gSignInStatus" style="font-size:11.5px; color:var(--ink-faint); display:none;"></span>
+        </div>
+        <div id="directAccessGroup" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <span style="font-size:12px; color:var(--ink-muted); font-weight:500;">Direct Access:</span>
+          <button class="btn small" onclick="directLogin('mis@satijapaper.com')">Admin (MIS)</button>
+          <button class="btn ghost small" onclick="directLogin('satijapaper@gmail.com')">Sandeep Dhawan</button>
+          <button class="btn ghost small" onclick="promptEmailLogin()">Other Email...</button>
+        </div>
       </div>
-      <div id="signedInView" style="display:none; align-items:center; gap:10px; flex-wrap:wrap;">
-        <span class="sub" style="margin:0;">Signed in as <b id="signedInEmail" class="mono"></b></span>
-        <span id="adminSwitcher" style="display:none; gap:8px; flex-wrap:wrap;">
-          <button class="btn small" id="btn-all" onclick="setCurrentUser('all')">Admin (view all)</button>
-          <button class="btn ghost small" id="btn-sandeep"
-            onclick="setCurrentUser('satijapaper@gmail.com')">Sandeep</button>
-        </span>
+      <div id="signedInView" style="display:none; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; width:100%;">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <span class="sub" style="margin:0;">Signed in as <b id="signedInEmail" class="mono"></b></span>
+          <span id="adminSwitcher" style="display:none; gap:8px; flex-wrap:wrap;">
+            <button class="btn small" id="btn-all" onclick="setCurrentUser('all')">Admin (view all)</button>
+            <button class="btn ghost small" id="btn-sandeep"
+              onclick="setCurrentUser('satijapaper@gmail.com')">Sandeep</button>
+          </span>
+        </div>
         <button class="btn ghost small" onclick="signOutUser()">Sign out</button>
       </div>
     </div>
@@ -1099,7 +1110,8 @@
       { key: 'PO2', label: 'Mill confirms', hours: 24, doerName: 'Mr. Sandeep Dhawan', doerEmails: ['satijapaper@gmail.com'], docs: ['Confirmation PDF'] },
       { key: 'PO3', label: 'Dispatch + invoice', hours: 48, doerName: 'Mr. Sandeep Dhawan', doerEmails: ['satijapaper@gmail.com'], docs: ['Packing List', 'Invoice PDF'] },
       { key: 'PO4', label: 'Driver follow-up', hours: 72, doerName: 'Mr. Sandeep Dhawan', doerEmails: ['satijapaper@gmail.com'], docs: [] },
-      { key: 'PO5', label: 'Warehouse delivery', hours: 96, doerName: 'Mr. Sandeep Dhawan', doerEmails: ['satijapaper@gmail.com'], docs: ['Godown Slip', 'GR Copy'] };
+      { key: 'PO5', label: 'Warehouse delivery', hours: 96, doerName: 'Mr. Sandeep Dhawan', doerEmails: ['satijapaper@gmail.com'], docs: ['Godown Slip', 'GR Copy'] }
+    ];
       
     const MANDATORY_DOCS = { PO2: ['Confirmation PDF'], PO3: ['Invoice PDF'] };
     const PURCHASE_FORM_URL = 'https://docs.google.com/spreadsheets/d/1bzFrGTL-oaGrrjyXgI8WJuKOzgJG2-9jcD8r80QR73w/edit';
@@ -1122,15 +1134,73 @@
       'satijapaper@gmail.com': 'satijapaper@gmail.com'
     };
 
+    let gsiTimer = null;
+    let gsiAttempts = 0;
+
     function initGoogleSignIn() {
-      if (!GOOGLE_CLIENT_ID || !window.google || !window.google.accounts || !window.google.accounts.id) {
+      if (window.google && window.google.accounts && window.google.accounts.id) {
+        if (gsiTimer) { clearInterval(gsiTimer); gsiTimer = null; }
+        try {
+          google.accounts.id.initialize({
+            client_id: GOOGLE_CLIENT_ID,
+            callback: onGoogleSignIn,
+            auto_select: false
+          });
+          const btn = document.getElementById('gSignInButton');
+          if (btn) {
+            btn.innerHTML = '';
+            google.accounts.id.renderButton(btn, { theme: 'outline', size: 'medium' });
+          }
+        } catch (e) {
+          console.warn('Google Sign-In init error:', e);
+          handleGsiStatus('(Google Sign-in restricted on this domain — use Direct Access)');
+        }
+      } else if (!gsiTimer) {
+        gsiTimer = setInterval(() => {
+          gsiAttempts++;
+          if (window.google && window.google.accounts && window.google.accounts.id) {
+            initGoogleSignIn();
+          } else if (gsiAttempts >= 10) {
+            clearInterval(gsiTimer);
+            gsiTimer = null;
+            handleGsiStatus('(Google Sign-in not loaded — use Direct Access buttons)');
+          }
+        }, 300);
+      }
+    }
+
+    function handleGsiStatus(msg) {
+      const el = document.getElementById('gSignInStatus');
+      if (el) {
+        el.style.display = 'inline-block';
+        el.textContent = msg;
+      }
+    }
+
+    function directLogin(email) {
+      if (!email) return;
+      email = email.toLowerCase().trim();
+      const isAdmin = ADMIN_EMAILS.includes(email) || email === 'mis@satijapaper.com';
+      const isStaff = STAFF_EMAILS[email] || email === 'satijapaper@gmail.com';
+
+      if (!isAdmin && !isStaff) {
+        toast.show('Email ' + email + ' is not registered in this system.', 'danger', 'Access Denied');
         return;
       }
+
       try {
-        google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onGoogleSignIn });
-        google.accounts.id.renderButton(document.getElementById('gSignInButton'), { theme: 'outline', size: 'medium' });
-      } catch (e) {
-        console.error('Google Sign-In init error:', e);
+        localStorage.setItem('purchaseFmsUser', JSON.stringify({ email }));
+      } catch (e) { }
+
+      applyUserSession(email);
+      loadOrders();
+      toast.show('Welcome! Signed in as ' + email, 'success');
+    }
+
+    function promptEmailLogin() {
+      const email = prompt('Enter your registered email address (e.g., mis@satijapaper.com):');
+      if (email && email.trim()) {
+        directLogin(email.trim());
       }
     }
 
@@ -1216,8 +1286,10 @@
       if (switcherEl) switcherEl.style.display = 'none';
       if (controlsEl) controlsEl.style.display = 'none';
       document.getElementById('stats').innerHTML = '';
-      document.getElementById('panel').innerHTML = '<div class="empty"><div class="big">Please sign in first</div>Your data will appear after signing in with the Google button above.</div>';
-      if (window.google && window.google.accounts && window.google.accounts.id) google.accounts.id.disableAutoSelect();
+      document.getElementById('panel').innerHTML = '<div class="empty"><div class="big">Please sign in first</div>Choose your account or sign in above to view and manage purchase orders.</div>';
+      if (window.google && window.google.accounts && window.google.accounts.id) {
+        try { google.accounts.id.disableAutoSelect(); } catch (e) { }
+      }
     }
 
     // ===== BACKEND CONFIG =====
@@ -2421,7 +2493,7 @@
 
     const hasRestored = restoreSession();
     if (!hasRestored) {
-      document.getElementById('panel').innerHTML = '<div class="empty"><div class="big">Please sign in first</div>Your data will appear after signing in with the Google button above.</div>';
+      document.getElementById('panel').innerHTML = '<div class="empty"><div class="big">Please sign in first</div>Choose your account or sign in above to view and manage purchase orders.</div>';
     }
     window.addEventListener('load', () => {
       initGoogleSignIn();
