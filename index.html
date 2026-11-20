@@ -1099,7 +1099,8 @@
       { key: 'PO2', label: 'Mill confirms', hours: 24, doerName: 'Mr. Sandeep Dhawan', doerEmails: ['satijapaper@gmail.com'], docs: ['Confirmation PDF'] },
       { key: 'PO3', label: 'Dispatch + invoice', hours: 48, doerName: 'Mr. Sandeep Dhawan', doerEmails: ['satijapaper@gmail.com'], docs: ['Packing List', 'Invoice PDF'] },
       { key: 'PO4', label: 'Driver follow-up', hours: 72, doerName: 'Mr. Sandeep Dhawan', doerEmails: ['satijapaper@gmail.com'], docs: [] },
-      { key: 'PO5', label: 'Warehouse delivery', hours: 96, doerName: 'Mr. Sandeep Dhawan', doerEmails: ['satijapaper@gmail.com'], docs: ['Godown Slip', 'GR Copy'] }
+      { key: 'PO5', label: 'Warehouse delivery', hours: 96, doerName: 'Mr. Sandeep Dhawan', doerEmails: ['satijapaper@gmail.com'], docs: ['Godown Slip', 'GR Copy'] },
+      { key: 'PO7', label: 'Check the Purchase Bill', hours: null, doerName: 'Ms. Pooja', doerEmails: ['poojasatijapaper@gmail.com'], docs: [] }
     ];
   
     const MANDATORY_DOCS = { PO2: ['Confirmation PDF'], PO3: ['Invoice PDF'] };
@@ -1120,7 +1121,8 @@
       'admin@satijapaper.com'
     ];
     const STAFF_EMAILS = {
-      'satijapaper@gmail.com': 'satijapaper@gmail.com'
+      'satijapaper@gmail.com': 'satijapaper@gmail.com',
+      'poojasatijapaper@gmail.com': 'poojasatijapaper@gmail.com'
     };
 
     function initGoogleSignIn() {
@@ -1156,7 +1158,11 @@
       if (emailEl) emailEl.textContent = email;
 
       const isAdmin = ADMIN_EMAILS.includes(email) || email === 'mis@satijapaper.com';
-      const isStaff = STAFF_EMAILS[email] || email === 'satijapaper@gmail.com';
+      const isStaff = STAFF_EMAILS[email];
+      ...
+    } else if (isStaff) {
+      ...
+      setCurrentUser(email);
 
       const switcherEl = document.getElementById('adminSwitcher');
       const controlsEl = document.getElementById('adminControls');
