@@ -970,18 +970,9 @@
 
     <div id="loginBanner"
       style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; flex-wrap:wrap; padding:12px 16px; border:1px solid var(--border); border-radius:10px; background:var(--surface); box-shadow:0 1px 3px rgba(0,0,0,0.04);">
-      <div id="signedOutView" style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; width:100%;">
-        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-          <span class="sub" style="margin:0; font-weight:600; color:var(--ink);">Sign In:</span>
-          <div id="gSignInButton"></div>
-          <span id="gSignInStatus" style="font-size:11.5px; color:var(--ink-faint); display:none;"></span>
-        </div>
-        <div id="directAccessGroup" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-          <span style="font-size:12px; color:var(--ink-muted); font-weight:500;">Direct Access:</span>
-          <button class="btn small" onclick="directLogin('mis@satijapaper.com')">Admin (MIS)</button>
-          <button class="btn ghost small" onclick="directLogin('satijapaper@gmail.com')">Sandeep Dhawan</button>
-          <button class="btn ghost small" onclick="promptEmailLogin()">Other Email...</button>
-        </div>
+      <div id="signedOutView" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+        <span class="sub" style="margin:0; font-weight:600; color:var(--ink);">Sign in with your Google account:</span>
+        <div id="gSignInButton"></div>
       </div>
       <div id="signedInView" style="display:none; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; width:100%;">
         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
@@ -1152,8 +1143,7 @@
             google.accounts.id.renderButton(btn, { theme: 'outline', size: 'medium' });
           }
         } catch (e) {
-          console.warn('Google Sign-In init error:', e);
-          handleGsiStatus('(Google Sign-in restricted on this domain — use Direct Access)');
+          console.error('Google Sign-In init error:', e);
         }
       } else if (!gsiTimer) {
         gsiTimer = setInterval(() => {
@@ -1163,44 +1153,8 @@
           } else if (gsiAttempts >= 10) {
             clearInterval(gsiTimer);
             gsiTimer = null;
-            handleGsiStatus('(Google Sign-in not loaded — use Direct Access buttons)');
           }
         }, 300);
-      }
-    }
-
-    function handleGsiStatus(msg) {
-      const el = document.getElementById('gSignInStatus');
-      if (el) {
-        el.style.display = 'inline-block';
-        el.textContent = msg;
-      }
-    }
-
-    function directLogin(email) {
-      if (!email) return;
-      email = email.toLowerCase().trim();
-      const isAdmin = ADMIN_EMAILS.includes(email) || email === 'mis@satijapaper.com';
-      const isStaff = STAFF_EMAILS[email] || email === 'satijapaper@gmail.com';
-
-      if (!isAdmin && !isStaff) {
-        toast.show('Email ' + email + ' is not registered in this system.', 'danger', 'Access Denied');
-        return;
-      }
-
-      try {
-        localStorage.setItem('purchaseFmsUser', JSON.stringify({ email }));
-      } catch (e) { }
-
-      applyUserSession(email);
-      loadOrders();
-      toast.show('Welcome! Signed in as ' + email, 'success');
-    }
-
-    function promptEmailLogin() {
-      const email = prompt('Enter your registered email address (e.g., mis@satijapaper.com):');
-      if (email && email.trim()) {
-        directLogin(email.trim());
       }
     }
 
@@ -1286,7 +1240,7 @@
       if (switcherEl) switcherEl.style.display = 'none';
       if (controlsEl) controlsEl.style.display = 'none';
       document.getElementById('stats').innerHTML = '';
-      document.getElementById('panel').innerHTML = '<div class="empty"><div class="big">Please sign in first</div>Choose your account or sign in above to view and manage purchase orders.</div>';
+      document.getElementById('panel').innerHTML = '<div class="empty"><div class="big">Please sign in first</div>Your data will appear after signing in with your Google account above.</div>';
       if (window.google && window.google.accounts && window.google.accounts.id) {
         try { google.accounts.id.disableAutoSelect(); } catch (e) { }
       }
@@ -2493,7 +2447,7 @@
 
     const hasRestored = restoreSession();
     if (!hasRestored) {
-      document.getElementById('panel').innerHTML = '<div class="empty"><div class="big">Please sign in first</div>Choose your account or sign in above to view and manage purchase orders.</div>';
+      document.getElementById('panel').innerHTML = '<div class="empty"><div class="big">Please sign in first</div>Your data will appear after signing in with your Google account above.</div>';
     }
     window.addEventListener('load', () => {
       initGoogleSignIn();
