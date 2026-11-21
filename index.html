@@ -948,7 +948,7 @@
         <img src="logo.png" alt="Satija Paper logo" style="height:48px; width:48px; object-fit:contain;">
         <div>
           <h1>Purchase order tracker</h1>
-          <div class="sub" style="margin-top:2px;">Build: 2026-11-20-v13</div>
+          <div class="sub" style="margin-top:2px;">Build: 2026-11-21-v14</div>
         </div>
       </div>
       <div style="display:flex; gap:8px; align-items:center;">
@@ -956,7 +956,7 @@
         <button class="btn ghost small" onclick="resyncSeed()" title="Force a sync right now">&#8635; Resync from
           Purchase Form</button>
         <button class="btn ghost small" onclick="initSheetColumns()"
-          title="Rearrange columns in Google Sheet Orders (Readable) according to new PO5 layout">&#9638; Rearrange Sheet Columns</button>
+          title="Rearrange columns in Google Sheet Orders (Readable) according to new layout with Check Purchase Bill">&#9638; Rearrange Sheet Columns</button>
         <button class="btn ghost small" onclick="dedupeOrders()"
           title="Remove duplicate PO rows, keeping the most complete version">Clean up duplicates</button>
         <button class="btn ghost small" onclick="backfillFields()"
@@ -981,6 +981,8 @@
             <button class="btn small" id="btn-all" onclick="setCurrentUser('all')">Admin (view all)</button>
             <button class="btn ghost small" id="btn-sandeep"
               onclick="setCurrentUser('satijapaper@gmail.com')">Sandeep</button>
+            <button class="btn ghost small" id="btn-pooja"
+              onclick="setCurrentUser('poojasatijapaper@gmail.com')">Pooja</button>
           </span>
         </div>
         <button class="btn ghost small" onclick="signOutUser()">Sign out</button>
@@ -1101,7 +1103,8 @@
       { key: 'PO2', label: 'Mill confirms', hours: 24, doerName: 'Mr. Sandeep Dhawan', doerEmails: ['satijapaper@gmail.com'], docs: ['Confirmation PDF'] },
       { key: 'PO3', label: 'Dispatch + invoice', hours: 48, doerName: 'Mr. Sandeep Dhawan', doerEmails: ['satijapaper@gmail.com'], docs: ['Packing List', 'Invoice PDF'] },
       { key: 'PO4', label: 'Driver follow-up', hours: 72, doerName: 'Mr. Sandeep Dhawan', doerEmails: ['satijapaper@gmail.com'], docs: [] },
-      { key: 'PO5', label: 'Warehouse delivery', hours: 96, doerName: 'Mr. Sandeep Dhawan', doerEmails: ['satijapaper@gmail.com'], docs: ['Godown Slip', 'GR Copy'] }
+      { key: 'PO5', label: 'Warehouse delivery', hours: 96, doerName: 'Mr. Sandeep Dhawan', doerEmails: ['satijapaper@gmail.com'], docs: ['Godown Slip', 'GR Copy'] },
+      { key: 'PO6', label: 'Check Purchase Bill', hours: 120, doerName: 'Ms. Pooja', doerEmails: ['poojasatijapaper@gmail.com'], docs: [] }
     ];
       
     const MANDATORY_DOCS = { PO2: ['Confirmation PDF'], PO3: ['Invoice PDF'] };
@@ -1122,7 +1125,8 @@
       'admin@satijapaper.com'
     ];
     const STAFF_EMAILS = {
-      'satijapaper@gmail.com': 'satijapaper@gmail.com'
+      'satijapaper@gmail.com': 'satijapaper@gmail.com',
+      'poojasatijapaper@gmail.com': 'poojasatijapaper@gmail.com'
     };
 
     let gsiTimer = null;
@@ -1179,7 +1183,7 @@
       if (emailEl) emailEl.textContent = email;
 
       const isAdmin = ADMIN_EMAILS.includes(email) || email === 'mis@satijapaper.com';
-      const isStaff = STAFF_EMAILS[email] || email === 'satijapaper@gmail.com';
+      const isStaff = STAFF_EMAILS[email] || email === 'satijapaper@gmail.com' || email === 'poojasatijapaper@gmail.com';
       
       const switcherEl = document.getElementById('adminSwitcher');
       const controlsEl = document.getElementById('adminControls');
@@ -1191,7 +1195,7 @@
       } else if (isStaff) {
         if (switcherEl) switcherEl.style.display = 'none';
         if (controlsEl) controlsEl.style.display = 'none';
-        setCurrentUser('satijapaper@gmail.com');
+        setCurrentUser(email);
       } else {
         if (switcherEl) switcherEl.style.display = 'none';
         if (controlsEl) controlsEl.style.display = 'none';
@@ -1298,11 +1302,31 @@
 
     function buildStepsForOrder(o) {
       const steps = {};
+      const isTransferred = o && o.steps && o.steps.PO3 && o.steps.PO3.transferStatus === 'Yes';
       STEPS.forEach((s, i) => {
+        let status = i === 0 ? 'done' : 'pending';
+        let actual = i === 0 ? (o.createdAt || Date.now()) : null;
+        let planned = (o.createdAt || Date.now()) + s.hours * 3600 * 1000;
+
+        if (s.key === 'PO6') {
+          if (isTransferred) {
+            status = 'skipped';
+            planned = null;
+          } else if (o.steps && o.steps.PO5 && o.steps.PO5.actual) {
+            planned = o.steps.PO5.actual + (5 * 24 * 3600 * 1000);
+          } else {
+            planned = null;
+          }
+        } else if (isTransferred && (s.key === 'PO4' || s.key === 'PO5')) {
+          status = 'skipped';
+          planned = null;
+        }
+
         steps[s.key] = {
-          status: i === 0 ? 'done' : 'pending',
-          planned: o.createdAt + s.hours * 3600 * 1000,
-          actual: i === 0 ? o.createdAt : null
+          status: status,
+          planned: planned,
+          actual: actual,
+          isCheckBill: s.key === 'PO6' ? true : undefined
         };
       });
       return steps;
@@ -1373,6 +1397,37 @@
                 if (o.steps.PO6.docs['E-Way Bill'] && !o.steps.PO5.docs['E-Way Bill']) {
                   o.steps.PO5.docs['E-Way Bill'] = o.steps.PO6.docs['E-Way Bill'];
                 }
+              }
+            }
+            // If PO6 is from old delivery schema (not yet marked as isCheckBill), initialize as Check Purchase Bill
+            if (!o.steps.PO6.isCheckBill) {
+              const isTransferred = isTransferNA(o, 'PO6');
+              if (isTransferred) {
+                o.steps.PO6 = { status: 'skipped', planned: null, actual: null, isCheckBill: true };
+              } else if (o.steps.PO5 && o.steps.PO5.actual) {
+                o.steps.PO6 = {
+                  status: 'pending',
+                  planned: o.steps.PO5.actual + (5 * 24 * 3600 * 1000),
+                  actual: null,
+                  isCheckBill: true
+                };
+              } else {
+                o.steps.PO6 = {
+                  status: 'pending',
+                  planned: null,
+                  actual: null,
+                  isCheckBill: true
+                };
+              }
+            } else if (o.steps.PO6.status === 'pending') {
+              const isTransferred = isTransferNA(o, 'PO6');
+              if (isTransferred) {
+                o.steps.PO6.status = 'skipped';
+                o.steps.PO6.planned = null;
+              } else if (o.steps.PO5 && o.steps.PO5.actual) {
+                o.steps.PO6.planned = o.steps.PO5.actual + (5 * 24 * 3600 * 1000);
+              } else {
+                o.steps.PO6.planned = null;
               }
             }
           }
@@ -1478,7 +1533,7 @@
         toast.warn('This only works once the Apps Script backend is connected.', 'Backend Required');
         return;
       }
-      if (!confirm('This will reorganize and update column headers in "Orders (Readable)" according to the new PO5 structure (Godown Slip, GR Copy, E-Way Bill Number, Confirmation of Delivery Date). Continue?')) return;
+      if (!confirm('This will reorganize and update column headers in "Orders (Readable)" according to the layout with Check Purchase Bill placed at the last column. Continue?')) return;
       const statusEl = document.getElementById('syncStatus');
       if (statusEl) statusEl.textContent = 'Rearranging columns…';
       try {
@@ -1500,11 +1555,12 @@
     async function saveOrder(o) {
       try {
         if (o.steps && o.steps.PO3 && o.steps.PO3.transferStatus === 'Yes') {
-          ['PO4', 'PO5'].forEach(k => {
+          ['PO4', 'PO5', 'PO6'].forEach(k => {
             if (!o.steps[k]) o.steps[k] = {};
             o.steps[k].status = 'skipped';
             o.steps[k].planned = null;
             o.steps[k].actual = null;
+            if (k === 'PO6') o.steps[k].isCheckBill = true;
           });
         }
         await backendSaveOrder(o);
@@ -1573,7 +1629,7 @@
       return (o.items || []).reduce((s, i) => s + (Number(i.orderQty) || 0) * (Number(i.rate) || 0), 0);
     }
     function isTransferNA(o, key) {
-      return (key === 'PO4' || key === 'PO5')
+      return (key === 'PO4' || key === 'PO5' || key === 'PO6')
         && o && o.steps && o.steps.PO3 && o.steps.PO3.transferStatus === 'Yes';
     }
     function stepIsDone(o, key) {
@@ -1611,8 +1667,8 @@
     }
 
     function updateLoginButtons() {
-      ['all', 'satijapaper@gmail.com'].forEach(v => {
-        const id = v === 'all' ? 'btn-all' : 'btn-sandeep';
+      ['all', 'satijapaper@gmail.com', 'poojasatijapaper@gmail.com'].forEach(v => {
+        const id = v === 'all' ? 'btn-all' : (v === 'poojasatijapaper@gmail.com' ? 'btn-pooja' : 'btn-sandeep');
         const el = document.getElementById(id);
         if (el) el.className = (v === currentUser) ? 'btn small' : 'btn ghost small';
       });
@@ -1822,16 +1878,20 @@
       const po5Fields = s.key === 'PO5' ? `
         <div class="doc-row" style="background:#FFF9EB; padding:8px 10px; border-radius:6px; border:1px solid #FFE0A3; margin:8px 0;">
           <span style="font-weight:600; color:#7A4100; font-size:12.5px;">E-Way Bill No. (12 digits) *</span>
-          <input type="text" id="fld-${o.id}-PO5-ewayBillNumber" maxlength="12" pattern="[0-9]{12}" inputmode="numeric" placeholder="Enter 12-digit E-Way Bill Number" value="${(o.steps.PO5 && o.steps.PO5.ewayBillNumber) || (o.steps.PO6 && o.steps.PO6.ewayBillNumber) || ''}" oninput="this.value=this.value.replace(/[^0-9]/g,'');noteDraft(this)" style="font-family:'JetBrains Mono',monospace; font-weight:600; font-size:13px; background:#fff;">
+          <input type="text" id="fld-${o.id}-PO5-ewayBillNumber" maxlength="12" pattern="[0-9]{12}" inputmode="numeric" placeholder="Enter 12-digit E-Way Bill Number" value="${(o.steps.PO5 && o.steps.PO5.ewayBillNumber) || ''}" oninput="this.value=this.value.replace(/[^0-9]/g,'');noteDraft(this)" style="font-family:'JetBrains Mono',monospace; font-weight:600; font-size:13px; background:#fff;">
         </div>
         <div class="doc-row" style="background:#F0F7F4; padding:8px 10px; border-radius:6px; border:1px solid #C2E2D6; margin:8px 0;">
           <span style="font-weight:600; color:#085041; font-size:12.5px;">Confirmation of Delivery Date *</span>
           <input type="date" id="fld-${o.id}-PO5-deliveryConfirmationDate" value="${(o.steps.PO5 && o.steps.PO5.deliveryConfirmationDate) || ''}" oninput="noteDraft(this)" style="font-family:inherit; font-weight:600; font-size:13px; background:#fff; padding:6px 10px; border:1px solid var(--border); border-radius:6px;">
         </div>` : '';
+      const po6Fields = s.key === 'PO6' && o.steps && o.steps.PO5 && o.steps.PO5.actual ? `
+        <div class="doc-row" style="background:#F0F7F4; padding:8px 10px; border-radius:6px; border:1px solid #C2E2D6; margin:8px 0; font-size:12.5px; color:#085041;">
+          <span style="font-weight:600;">PO5 Delivery Completed:</span> ${fmtDate(o.steps.PO5.actual)}
+        </div>` : '';
 
       const poDateStr = fmtPoDate(o.poDate, o.createdAt);
       const isTransferred = isTransferNA(o, s.key);
-      const plannedSub = isTransferred ? 'Transferred to other party' : (st.planned ? `Planned: ${fmtDate(st.planned)} ${delayText(st)}` : '');
+      const plannedSub = isTransferred ? 'Transferred to other party' : (st.planned ? `Planned: ${fmtDate(st.planned)} ${delayText(st)}` : (s.key === 'PO6' ? 'Planned: 5 days after PO5 delivery' : ''));
 
       return `<div class="task-card ${overdue ? 'overdue' : ''}">
     <div class="task-head">
@@ -1843,7 +1903,7 @@
     </div>
     <div class="task-sub">${o.mill}${plannedSub ? ' &middot; ' + plannedSub : ''}</div>
     <div class="task-items">${itemsLine}</div>
-    ${po3Section}${po4Fields}${po5Fields}${docInputs}
+    ${po3Section}${po4Fields}${po5Fields}${po6Fields}${docInputs}
     <button class="btn small" id="markdone-${o.id}-${s.key}" style="margin-top:8px;" onclick="completeStep('${o.id}','${s.key}')">Mark done</button>
   </div>`;
     }
@@ -1983,7 +2043,9 @@
         let cls = 'step-card';
         if (stepIsDone(o, s.key)) cls += ' done';
         else if (i === idx) cls += ' current';
-        const plannedLine = (naSkip || !st.planned) ? '' : `<div class="time">Planned: ${fmtDate(st.planned)}</div>`;
+        const plannedLine = (naSkip || !st.planned)
+          ? (naSkip ? '' : (s.key === 'PO6' ? `<div class="time" style="color:var(--ink-faint); font-style:italic;">Planned: 5 days after PO5 delivery</div>` : ''))
+          : `<div class="time">Planned: ${fmtDate(st.planned)}</div>`;
         const doneLine = (st.status === 'done'
           ? `<div class="time">Done: ${fmtDate(st.actual)}</div>`
           : naSkip
@@ -2023,6 +2085,14 @@
                 <div style="font-weight:600; font-size:12px; color:var(--ink); margin-top:2px;">${delivVal ? delivVal : '<span style="color:var(--ink-faint); font-weight:normal; font-style:italic;">Not confirmed yet</span>'}</div>
               </div>
             </div>`;
+        } else if (!naSkip && s.key === 'PO6') {
+          const po5Actual = o.steps && o.steps.PO5 && o.steps.PO5.actual;
+          if (po5Actual) {
+            extraFieldsHtml = `
+              <div class="ts" style="margin-top:6px; line-height:1.5; padding:6px 8px; background:#F0F7F4; border-radius:6px; border:1px solid #C2E2D6; font-size:11.5px; color:#085041;">
+                <span style="font-weight:600;">PO5 Warehouse Delivery:</span> ${fmtDate(po5Actual)}
+              </div>`;
+          }
         }
         let actionHtml = '';
         if (i === idx && !stepIsDone(o, s.key)) {
@@ -2254,8 +2324,18 @@
 
       o.steps[stepKey].status = 'done';
       o.steps[stepKey].actual = Date.now();
+      if (stepKey === 'PO6') o.steps.PO6.isCheckBill = true;
       if (Object.keys(docsFlag).length) o.steps[stepKey].docs = docsFlag;
       if (pendingDocs[orderId]) delete pendingDocs[orderId][stepKey];
+
+      // If PO5 is marked done and transfer is No, set PO6 (Check Purchase Bill) planned date to PO5 actual + 5 days
+      if (stepKey === 'PO5' && !isTransferNA(o, 'PO6')) {
+        if (!o.steps.PO6) o.steps.PO6 = {};
+        o.steps.PO6.status = 'pending';
+        o.steps.PO6.planned = o.steps.PO5.actual + (5 * 24 * 3600 * 1000);
+        o.steps.PO6.actual = null;
+        o.steps.PO6.isCheckBill = true;
+      }
 
       // A dropped transfer (Transfer status = Yes) means the order never goes
       // through warehouse delivery/transporter follow-up - mark remaining steps
@@ -2266,6 +2346,7 @@
           o.steps[s.key].status = 'skipped';
           o.steps[s.key].planned = null;
           o.steps[s.key].actual = null;
+          if (s.key === 'PO6') o.steps[s.key].isCheckBill = true;
         });
       }
 
