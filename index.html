@@ -948,7 +948,7 @@
         <img src="logo.png" alt="Satija Paper logo" style="height:48px; width:48px; object-fit:contain;">
         <div>
           <h1>Purchase order tracker</h1>
-          <div class="sub" style="margin-top:2px;">Build: 2026-11-21-v14</div>
+          <div class="sub" style="margin-top:2px;">Build: 2026-11-22-v1</div>
         </div>
       </div>
       <div style="display:flex; gap:8px; align-items:center;">
@@ -956,7 +956,7 @@
         <button class="btn ghost small" onclick="resyncSeed()" title="Force a sync right now">&#8635; Resync from
           Purchase Form</button>
         <button class="btn ghost small" onclick="initSheetColumns()"
-          title="Rearrange columns in Google Sheet Orders (Readable) according to new layout with Check Purchase Bill">&#9638; Rearrange Sheet Columns</button>
+          title="Rearrange columns in Google Sheet Orders (Readable) according to new layout with PO6 (Delivery complete hone ke baad mill invoice wapis office mangna) placed at the last column">&#9638; Rearrange Sheet Columns</button>
         <button class="btn ghost small" onclick="dedupeOrders()"
           title="Remove duplicate PO rows, keeping the most complete version">Clean up duplicates</button>
         <button class="btn ghost small" onclick="backfillFields()"
@@ -1533,7 +1533,7 @@
         toast.warn('This only works once the Apps Script backend is connected.', 'Backend Required');
         return;
       }
-      if (!confirm('This will reorganize and update column headers in "Orders (Readable)" according to the layout with Check Purchase Bill placed at the last column. Continue?')) return;
+      if (!confirm('This will reorganize and update column headers in "Orders (Readable)" according to the layout with PO6 (Delivery complete hone ke baad mill invoice wapis office mangna) placed at the last column. Continue?')) return;
       const statusEl = document.getElementById('syncStatus');
       if (statusEl) statusEl.textContent = 'Rearranging columns…';
       try {
@@ -1572,7 +1572,11 @@
     }
 
     function fmtMoney(n) {
-      return '\u20b9' + Math.round(n).toLocaleString('en-IN');
+      if (n === null || n === undefined || n === '') return '';
+      if (typeof n === 'string' && n.trim().toLowerCase() === 'nil') return 'Nil';
+      const num = Number(n);
+      if (isNaN(num)) return String(n);
+      return '\u20b9' + Math.round(num).toLocaleString('en-IN');
     }
     function fmtDate(ts) {
       if (!ts) return '\u2014';
@@ -1734,16 +1738,25 @@
     // too, or they'd reappear the next time that order shows a confirm form.
     function clearDrafts(orderId, stepKey) {
       const fieldPrefix = `fld-${orderId}-${stepKey}-`;
+      const selPrefix = `sel-${orderId}-${stepKey}-`;
       const qtyPrefix = `inv-${orderId}-`;
       Object.keys(draftValues).forEach(id => {
-        if (id.startsWith(fieldPrefix) || (stepKey === 'PO3' && id.startsWith(qtyPrefix))) delete draftValues[id];
+        if (id.startsWith(fieldPrefix) || id.startsWith(selPrefix) || (stepKey === 'PO3' && id.startsWith(qtyPrefix))) delete draftValues[id];
       });
       persistDrafts();
     }
     function applyDrafts() {
       Object.keys(draftValues).forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.value = draftValues[id];
+        if (el) {
+          el.value = draftValues[id];
+          if (id.startsWith('sel-') && id.includes('-PO3-')) {
+            const parts = id.split('-');
+            const orderId = parts[1];
+            const field = parts[3];
+            handleCostModeChange(orderId, field, true);
+          }
+        }
       });
     }
 
@@ -1807,6 +1820,112 @@
   `;
     }
 
+    function handleCostModeChange(orderId, field, skipDraft) {
+      const sel = document.getElementById(`sel-${orderId}-PO3-${field}`);
+      const inp = document.getElementById(`fld-${orderId}-PO3-${field}`);
+      const badge = document.getElementById(`badge-nil-${orderId}-${field}`);
+      const err = document.getElementById(`err-${orderId}-${field}`);
+      if (!sel) return;
+
+      if (err) { err.textContent = ''; err.style.display = 'none'; }
+
+      if (sel.value === 'Nil') {
+        if (inp) { inp.style.display = 'none'; inp.value = ''; }
+        if (badge) badge.style.display = 'inline-flex';
+      } else if (sel.value === 'Amount') {
+        if (badge) badge.style.display = 'none';
+        if (inp) {
+          inp.style.display = 'block';
+          inp.focus();
+        }
+      } else {
+        if (inp) { inp.style.display = 'none'; inp.value = ''; }
+        if (badge) badge.style.display = 'none';
+      }
+      if (!skipDraft) noteDraft(sel);
+    }
+
+    function handleCostAmountInput(el, orderId, field) {
+      const err = document.getElementById(`err-${orderId}-${field}`);
+      const val = el.value.trim();
+      const label = field === 'insurance' ? 'Insurance' : 'Freight';
+
+      if (val !== '' && (val === '0' || Number(val) <= 0)) {
+        el.value = '';
+        if (err) {
+          err.textContent = `0 enter nahi kar sakte. Agar ${label.toLowerCase()} charge nahi hai toh Nil select karein.`;
+          err.style.display = 'block';
+        }
+        toast.warn(`0 is not allowed for ${label}. Please select "Nil" if there is no charge.`, '0 Not Allowed');
+        return;
+      }
+      if (err) {
+        err.textContent = '';
+        err.style.display = 'none';
+      }
+      noteDraft(el);
+    }
+
+    function renderCostField(o, field, label) {
+      const st = (o.steps && o.steps.PO3) || {};
+      const hasVal = v => v !== undefined && v !== null && v !== '';
+      const val = hasVal(st[field]) ? st[field] : (hasVal(o[field]) ? o[field] : '');
+      
+      let mode = '';
+      let amount = '';
+      
+      if (hasVal(val)) {
+        const sVal = String(val).trim();
+        if (sVal.toLowerCase() === 'nil' || sVal === '0' || Number(sVal) === 0) {
+          mode = 'Nil';
+        } else {
+          mode = 'Amount';
+          amount = sVal;
+        }
+      }
+
+      const quoted = o[field];
+      let hintText = '';
+      if (hasVal(quoted)) {
+        const sQuoted = String(quoted).trim();
+        if (sQuoted.toLowerCase() === 'nil' || sQuoted === '0' || Number(sQuoted) === 0) {
+          hintText = 'From Purchase Form: Nil';
+        } else {
+          hintText = `From Purchase Form: ${fmtMoney(quoted)}`;
+        }
+      }
+
+      return `
+        <div class="field cost-field" id="cost-wrap-${o.id}-${field}">
+          <label style="display:flex; justify-content:space-between; align-items:center;">
+            <span>${label} *</span>
+            <span style="font-size:11px; font-weight:normal; color:var(--ink-muted);">(Nil ya Amount select karein)</span>
+          </label>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <select id="sel-${o.id}-PO3-${field}" 
+                    style="width:115px; flex-shrink:0; font-weight:600; background:#fff;" 
+                    onchange="handleCostModeChange('${o.id}', '${field}')">
+              <option value="">-- Select --</option>
+              <option value="Nil" ${mode === 'Nil' ? 'selected' : ''}>Nil</option>
+              <option value="Amount" ${mode === 'Amount' ? 'selected' : ''}>Amount (₹)</option>
+            </select>
+            <input type="number" id="fld-${o.id}-PO3-${field}" 
+                   value="${mode === 'Amount' ? amount : ''}" 
+                   step="0.01" min="0.01" 
+                   placeholder="Enter amount (₹)" 
+                   style="flex:1; display:${mode === 'Amount' ? 'block' : 'none'};" 
+                   oninput="handleCostAmountInput(this, '${o.id}', '${field}')">
+            <div id="badge-nil-${o.id}-${field}" 
+                 style="display:${mode === 'Nil' ? 'inline-flex' : 'none'}; align-items:center; padding:4px 10px; background:#E8F5E9; color:#2E7D32; border:1px solid #C8E6C9; border-radius:4px; font-size:12px; font-weight:600;">
+              ✓ Nil (No Charge)
+            </div>
+          </div>
+          <div id="err-${o.id}-${field}" style="display:none; color:#C62828; font-size:11px; margin-top:3px; font-weight:600;"></div>
+          ${hintText ? `<span class="field-hint">${hintText}</span>` : ''}
+        </div>
+      `;
+    }
+
     // PO3's full confirmation UI (item qty + transport + invoice + costs), shared
     // by the compact task-card view and the full order-detail view so both stay
     // in sync. Insurance/Freight prefill from the order-level value backfilled
@@ -1829,17 +1948,12 @@
       }).join('');
 
       const hasVal = v => v !== undefined && v !== null && v !== '';
-      // Fields whose quote/plan value comes from the Purchase Form at the
-      // order level (source field name may differ, e.g. transporterName here
-      // is quoted on the form as "Transport Name") - prefilled with a hint,
-      // same pattern as Insurance/Freight, so PO3 just needs to confirm it.
-      const PF_SOURCE = { insurance: 'insurance', freight: 'freight', vehicleNumber: 'vehicleNumber', transporterName: 'transportName' };
-      const isMoney = f => f === 'insurance' || f === 'freight';
+      const PF_SOURCE = { vehicleNumber: 'vehicleNumber', transporterName: 'transportName' };
       const fieldGroup = (title, fields) => {
         const inputs = fields.map(([field, label, type, extra]) => {
           const src = PF_SOURCE[field];
           const prefill = src && hasVal(o[src]) ? o[src] : '';
-          const hint = src && hasVal(o[src]) ? `<span class="field-hint">From Purchase Form: ${isMoney(field) ? fmtMoney(o[src]) : o[src]}</span>` : '';
+          const hint = src && hasVal(o[src]) ? `<span class="field-hint">From Purchase Form: ${o[src]}</span>` : '';
           if (type === 'select') {
             const options = extra.map(opt => `<option value="${opt}">${opt}</option>`).join('');
             return `<div class="field"><label>${label}</label><select id="fld-${o.id}-PO3-${field}" onchange="noteDraft(this)"><option value=""></option>${options}</select>${hint}</div>`;
@@ -1854,7 +1968,11 @@
     ${invRows}
     ${fieldGroup('Transport', [['vehicleNumber', 'Vehicle number'], ['driverNumber', 'Driver mobile number', 'tel', 'maxlength="10" pattern="[0-9]{10}" inputmode="numeric" placeholder="10-digit mobile no."'], ['transporterName', 'Transporter name']])}
     ${fieldGroup('Invoice', [['invoiceNumber', 'Invoice number'], ['invoiceDate', 'Invoice date', 'date'], ['invoiceCreditDays', 'Credit days', 'number'], ['invoiceAmount', 'Invoice amount', 'number'], ['transferStatus', 'Transfer status (drop?)', 'select', ['No', 'Yes']]])}
-    ${fieldGroup('Costs &middot; confirm from Purchase Form', [['insurance', 'Insurance', 'number'], ['freight', 'Freight', 'number']])}
+    <div class="confirm-group">Costs &middot; confirm from Purchase Form</div>
+    <div class="field-grid">
+      ${renderCostField(o, 'insurance', 'Insurance')}
+      ${renderCostField(o, 'freight', 'Freight')}
+    </div>
   </div>`;
     }
 
@@ -2056,8 +2174,15 @@
           const hasVal = v => v !== undefined && v !== null && v !== '';
           const costLine = (confirmed, quoted) => {
             if (!hasVal(confirmed)) return '';
-            const differs = hasVal(quoted) && Number(quoted) !== Number(confirmed);
-            return fmtMoney(confirmed) + (differs ? ` (Purchase Form: ${fmtMoney(quoted)})` : '');
+            const isConfNil = String(confirmed).toLowerCase() === 'nil';
+            const isQuotedNil = hasVal(quoted) && (String(quoted).toLowerCase() === 'nil' || Number(quoted) === 0);
+            const confDisplay = isConfNil ? 'Nil' : fmtMoney(confirmed);
+            let quotedDisplay = '';
+            if (hasVal(quoted)) {
+              quotedDisplay = isQuotedNil ? 'Nil' : fmtMoney(quoted);
+            }
+            const differs = quotedDisplay && confDisplay.toLowerCase() !== quotedDisplay.toLowerCase();
+            return confDisplay + (differs ? ` (Purchase Form: ${quotedDisplay})` : '');
           };
           const rows = [['Vehicle', st.vehicleNumber], ['Driver', st.driverNumber], ['Transporter', st.transporterName],
           ['Invoice no.', st.invoiceNumber], ['Invoice date', st.invoiceDate], ['Credit days (invoice)', st.invoiceCreditDays],
@@ -2246,10 +2371,40 @@
           const el = document.getElementById(`inv-${orderId}-${it.id}`);
           if (el && el.value !== '') it.invoiceQty = parseFloat(el.value);
         });
-        ['vehicleNumber', 'driverNumber', 'transporterName', 'invoiceNumber', 'invoiceDate', 'invoiceCreditDays', 'invoiceAmount', 'transferStatus', 'insurance', 'freight'].forEach(field => {
+        ['vehicleNumber', 'driverNumber', 'transporterName', 'invoiceNumber', 'invoiceDate', 'invoiceCreditDays', 'invoiceAmount', 'transferStatus'].forEach(field => {
           const el = document.getElementById(`fld-${orderId}-PO3-${field}`);
-          if (el && el.value !== '') o.steps.PO3[field] = ['invoiceCreditDays', 'invoiceAmount', 'insurance', 'freight'].includes(field) ? parseFloat(el.value) : el.value;
+          if (el && el.value !== '') o.steps.PO3[field] = ['invoiceCreditDays', 'invoiceAmount'].includes(field) ? parseFloat(el.value) : el.value;
         });
+
+        // Insurance and Freight confirmation & strict validation (0 is strictly disallowed; Nil must be selected if no charge)
+        for (const f of ['insurance', 'freight']) {
+          const sel = document.getElementById(`sel-${orderId}-PO3-${f}`);
+          const inp = document.getElementById(`fld-${orderId}-PO3-${f}`);
+          const fLabel = f === 'insurance' ? 'Insurance' : 'Freight';
+
+          if (!sel || !sel.value) {
+            toast.warn(`Please select Nil or enter an amount for ${fLabel}.`, `${fLabel} Required`);
+            if (sel) sel.focus();
+            return;
+          }
+
+          if (sel.value === 'Nil') {
+            o.steps.PO3[f] = 'Nil';
+          } else if (sel.value === 'Amount') {
+            const rawVal = inp ? inp.value.trim() : '';
+            const num = parseFloat(rawVal);
+            if (!rawVal || isNaN(num) || num <= 0) {
+              toast.warn(`0 is not allowed for ${fLabel}. Please enter an amount greater than 0, or select Nil.`, `Invalid ${fLabel}`);
+              if (inp) {
+                inp.style.display = 'block';
+                inp.focus();
+              }
+              return;
+            }
+            o.steps.PO3[f] = num;
+          }
+        }
+
         if (o.steps.PO3.driverNumber && !/^\d{10}$/.test(o.steps.PO3.driverNumber)) {
           toast.warn('Driver mobile number must be exactly 10 digits.', 'Invalid Phone Number');
           return;
