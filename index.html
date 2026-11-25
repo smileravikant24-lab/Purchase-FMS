@@ -1610,6 +1610,19 @@
       if (!isNaN(d.getTime())) return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
       return s;
     }
+    function escapeHtml(s) {
+      return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    function getOrderInvoice(o) {
+      if (!o) return { invNo: '', invDate: '' };
+      const p3 = (o.steps && o.steps.PO3) || {};
+      const invNo = String(p3.invoiceNumber || o.invoiceNumber || '').trim();
+      let invDate = p3.invoiceDate || o.invoiceDate || '';
+      if (invDate instanceof Date) {
+        invDate = invDate.toISOString().split('T')[0];
+      }
+      return { invNo, invDate: String(invDate || '').trim() };
+    }
     function fmtDuration(ms) {
       const mins = Math.round(Math.abs(ms) / 60000);
       const h = Math.floor(mins / 60), m = mins % 60;
@@ -1685,12 +1698,16 @@
       let base = orders;
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
-        return base.filter(o =>
-          o.id.toLowerCase().includes(q) ||
-          o.mill.toLowerCase().includes(q) ||
-          fmtPoDate(o.poDate, o.createdAt).toLowerCase().includes(q) ||
-          ((o.steps && o.steps.PO5 && o.steps.PO5.ewayBillNumber) || (o.steps && o.steps.PO6 && o.steps.PO6.ewayBillNumber) || '').toLowerCase().includes(q)
-        );
+        return base.filter(o => {
+          const invInfo = getOrderInvoice(o);
+          return o.id.toLowerCase().includes(q) ||
+            o.mill.toLowerCase().includes(q) ||
+            fmtPoDate(o.poDate, o.createdAt).toLowerCase().includes(q) ||
+            invInfo.invNo.toLowerCase().includes(q) ||
+            invInfo.invDate.toLowerCase().includes(q) ||
+            fmtPoDate(invInfo.invDate).toLowerCase().includes(q) ||
+            ((o.steps && o.steps.PO5 && o.steps.PO5.ewayBillNumber) || (o.steps && o.steps.PO6 && o.steps.PO6.ewayBillNumber) || '').toLowerCase().includes(q);
+        });
       }
       const done = base.filter(o => currentStepIndex(o) >= STEPS.length);
       const notDone = base.filter(o => currentStepIndex(o) < STEPS.length);
@@ -2010,12 +2027,20 @@
       const poDateStr = fmtPoDate(o.poDate, o.createdAt);
       const isTransferred = isTransferNA(o, s.key);
       const plannedSub = isTransferred ? 'Transferred to other party' : (st.planned ? `Planned: ${fmtDate(st.planned)} ${delayText(st)}` : (s.key === 'PO6' ? 'Planned: 5 days after PO5 delivery' : ''));
+      const invInfo = getOrderInvoice(o);
+      const invNo = invInfo.invNo;
+      const invDate = invInfo.invDate;
 
       return `<div class="task-card ${overdue ? 'overdue' : ''}">
     <div class="task-head">
       <div>
         <span class="task-pid">${o.id}</span>
         ${poDateStr ? `<div class="po-date mono">${poDateStr}</div>` : ''}
+        ${(invNo || invDate) ? `
+          <div class="mono" style="font-size:11px; color:#0f766e; font-weight:600; margin-top:3px; display:inline-flex; align-items:center; gap:4px; background:#f0fdf4; border:1px solid #bbf7d0; padding:1px 6px; border-radius:4px;" title="Invoice No (Col V) &amp; Date (Col W)">
+            <span>📄</span>
+            <span>${invNo ? escapeHtml(invNo) : 'Invoice'}${invNo && invDate ? ' · ' : ''}${invDate ? escapeHtml(fmtPoDate(invDate)) : ''}</span>
+          </div>` : ''}
       </div>
       <span class="badge ${overdue ? 'danger' : 'warn'}">${s.key} \u00b7 ${s.label}${overdue ? ' \u00b7 overdue' : ''}</span>
     </div>
@@ -2073,6 +2098,9 @@
         const mismatch = orderHasMismatch(o);
         const isOpen = !!expanded[o.id];
         const poDateStr = fmtPoDate(o.poDate, o.createdAt);
+        const invInfo = getOrderInvoice(o);
+        const invNo = invInfo.invNo;
+        const invDate = invInfo.invDate;
         const stamps = STEPS.map((s, i) => {
           let cls = 'tick';
           if (stepIsDone(o, s.key)) cls += ' done';
@@ -2091,6 +2119,11 @@
         <div>
           <div class="pid mono">${o.id}</div>
           ${poDateStr ? `<div class="po-date mono">${poDateStr}</div>` : ''}
+          ${(invNo || invDate) ? `
+            <div class="mono" style="font-size:11px; color:#0f766e; font-weight:600; margin-top:3px; display:inline-flex; align-items:center; gap:4px; background:#f0fdf4; border:1px solid #bbf7d0; padding:1px 6px; border-radius:4px;" title="Invoice No (Col V) &amp; Date (Col W)">
+              <span>📄</span>
+              <span>${invNo ? escapeHtml(invNo) : 'Invoice'}${invNo && invDate ? ' · ' : ''}${invDate ? escapeHtml(fmtPoDate(invDate)) : ''}</span>
+            </div>` : ''}
           ${mismatch ? '<div class="badge danger" style="margin-top:4px;">Qty mismatch</div>' : ''}
         </div>
         <div>${o.mill}</div>
@@ -2117,8 +2150,13 @@
       const poDateStr = fmtPoDate(o.poDate, o.createdAt);
       const ewayNo = (o.steps && o.steps.PO5 && o.steps.PO5.ewayBillNumber) || (o.steps && o.steps.PO6 && o.steps.PO6.ewayBillNumber) || '';
       const deliveryConf = (o.steps && o.steps.PO5 && o.steps.PO5.deliveryConfirmationDate) || '';
+      const invInfo = getOrderInvoice(o);
+      const invNo = invInfo.invNo;
+      const invDate = invInfo.invDate;
       const orderInfoRows = [
         ['PO date', poDateStr],
+        ['Invoice No. (Col V)', invNo ? `<span class="mono" style="font-weight:700; color:#0f766e; background:#f0fdf4; padding:2px 8px; border-radius:4px; border:1px solid #bbf7d0;">${escapeHtml(invNo)}</span>` : '<span style="color:var(--ink-faint); font-style:italic;">Not entered</span>'],
+        ['Invoice Date (Col W)', invDate ? `<span class="mono" style="font-weight:700; color:#0f766e; background:#f0fdf4; padding:2px 8px; border-radius:4px; border:1px solid #bbf7d0;">${escapeHtml(fmtPoDate(invDate))}</span>` : '<span style="color:var(--ink-faint); font-style:italic;">Not entered</span>'],
         ['E-Way Bill No.', (ewayNo ? `<span class="mono" style="font-weight:600; color:var(--accent-ink);">${ewayNo}</span>` : '<span style="color:var(--ink-faint); font-style:italic;">Not entered</span>') + ` <button class="btn ghost small" style="padding:1px 6px; font-size:10px; margin-left:6px;" onclick="promptUpdateEwayBill('${o.id}')">${ewayNo ? 'Edit' : '+ Enter'}</button>`],
         ['Confirmation of Delivery Date', deliveryConf ? `<span class="mono" style="font-weight:600; color:var(--accent-ink);">${fmtPoDate(deliveryConf)}</span>` : '<span style="color:var(--ink-faint); font-style:italic;">Not confirmed yet</span>'],
         ['GSTIN', o.gstin], ['Address', o.address], ['Phone', o.phone],
