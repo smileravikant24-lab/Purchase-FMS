@@ -1965,12 +1965,19 @@
       }).join('');
 
       const hasVal = v => v !== undefined && v !== null && v !== '';
+      const p3 = (o.steps && o.steps.PO3) || {};
       const PF_SOURCE = { vehicleNumber: 'vehicleNumber', transporterName: 'transportName' };
       const fieldGroup = (title, fields) => {
         const inputs = fields.map(([field, label, type, extra]) => {
           const src = PF_SOURCE[field];
-          const prefill = src && hasVal(o[src]) ? o[src] : '';
-          const hint = src && hasVal(o[src]) ? `<span class="field-hint">From Purchase Form: ${o[src]}</span>` : '';
+          const sheetVal = hasVal(p3[field]) ? p3[field] : (hasVal(o[field]) ? o[field] : '');
+          const prefill = src && hasVal(o[src]) ? o[src] : sheetVal;
+          let hint = '';
+          if (src && hasVal(o[src])) {
+            hint = `<span class="field-hint">From Purchase Form: ${o[src]}</span>`;
+          } else if ((field === 'invoiceNumber' || field === 'invoiceDate') && hasVal(sheetVal)) {
+            hint = `<span class="field-hint" style="color:#0f766e; font-weight:600;">✓ Synced from Orders (Readable)</span>`;
+          }
           if (type === 'select') {
             const options = extra.map(opt => `<option value="${opt}">${opt}</option>`).join('');
             return `<div class="field"><label>${label}</label><select id="fld-${o.id}-PO3-${field}" onchange="noteDraft(this)"><option value=""></option>${options}</select>${hint}</div>`;
